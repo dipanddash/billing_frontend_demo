@@ -1,0 +1,107 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 250 20% 98%;
+    --foreground: 240 20% 10%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 240 20% 10%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 240 20% 10%;
+
+    --primary: 252 75% 60%;
+    --primary-foreground: 0 0% 100%;
+
+    --primary-start: 252 75% 60%;
+    --primary-end: 252 100% 74%;
+
+    --secondary: 250 25% 95%;
+    --secondary-foreground: 240 20% 10%;
+
+    --muted: 250 15% 95%;
+    --muted-foreground: 240 8% 55%;
+
+    --accent: 250 30% 94%;
+    --accent-foreground: 252 75% 60%;
+
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+
+    --success: 142 71% 45%;
+    --success-foreground: 0 0% 100%;
+
+    --warning: 32 95% 55%;
+    --warning-foreground: 0 0% 100%;
+
+    --info: 200 80% 55%;
+    --info-foreground: 0 0% 100%;
+
+    --border: 250 15% 91%;
+    --input: 250 15% 91%;
+    --ring: 252 75% 60%;
+
+    --radius: 1rem;
+
+    --sidebar-background: 0 0% 98%;
+    --sidebar-foreground: 240 5.3% 26.1%;
+    --sidebar-primary: 252 75% 60%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 250 30% 94%;
+    --sidebar-accent-foreground: 240 5.9% 10%;
+    --sidebar-border: 250 15% 91%;
+    --sidebar-ring: 252 75% 60%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  }
+}
+
+@layer utilities {
+  .gradient-primary {
+    background: linear-gradient(135deg, hsl(252, 75%, 60%), hsl(252, 100%, 74%));
+  }
+
+  .gradient-primary-hover {
+    background: linear-gradient(135deg, hsl(252, 75%, 55%), hsl(252, 100%, 69%));
+  }
+
+  .gradient-hero {
+    background: linear-gradient(135deg, hsl(252, 75%, 60%), hsl(265, 90%, 70%), hsl(252, 100%, 74%));
+  }
+
+  .glass-card {
+    background: hsla(0, 0%, 100%, 0.85);
+    backdrop-filter: blur(20px);
+    border: 1px solid hsla(250, 15%, 91%, 0.6);
+  }
+
+  .shadow-soft {
+    box-shadow: 0 1px 3px hsla(252, 30%, 30%, 0.04), 0 4px 12px hsla(252, 30%, 30%, 0.06);
+  }
+
+  .shadow-card {
+    box-shadow: 0 1px 3px hsla(252, 30%, 30%, 0.04), 0 8px 24px hsla(252, 30%, 30%, 0.08);
+  }
+
+  .shadow-card-hover {
+    box-shadow: 0 4px 12px hsla(252, 30%, 30%, 0.08), 0 16px 40px hsla(252, 30%, 30%, 0.12);
+  }
+
+  .shadow-glow {
+    box-shadow: 0 0 24px hsla(252, 75%, 60%, 0.25), 0 8px 24px hsla(252, 30%, 30%, 0.1);
+  }
+}
