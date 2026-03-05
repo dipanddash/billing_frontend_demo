@@ -12,6 +12,7 @@ import Products from "./pages/admin/Products";
 import Customers from "./pages/admin/Customers";
 import Vendors from "./pages/admin/Vendors";
 import StaffManagement from "./pages/admin/StaffManagement";
+import Coupons from "./pages/admin/Coupons";
 import StaffProfile from "./pages/staff/Profile";
 import AdminProfile from "./pages/admin/Profile";
 import Reports from "./pages/admin/Reports";
@@ -52,6 +53,7 @@ const AppRoutes = () => {
         <Route index element={<AdminDashboard />} />
         <Route path="invoices" element={<Invoices />} />
         <Route path="products" element={<Products />} />
+        <Route path="coupons" element={<Coupons />} />
         <Route path="customers" element={<Customers />} />
         <Route path="vendors" element={<Vendors />} />
         <Route path="reports" element={<Reports />} />

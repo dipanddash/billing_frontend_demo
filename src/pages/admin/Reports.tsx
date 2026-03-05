@@ -3,7 +3,7 @@ import { FileDown, FileSpreadsheet } from "lucide-react";
 import * as XLSX from "xlsx";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
-import { REPORT_DEFINITIONS } from "@/lib/reportsConfig";
+import { REPORT_DEFINITIONS, type ReportDefinition } from "@/lib/reportsConfig";
 
 const API_BASE = "http://192.168.1.18:8000";
 
@@ -17,6 +17,10 @@ type ReportPayload = {
 type ReportColumn = {
   key: string;
   label: string;
+};
+
+type AdminReportDefinition = ReportDefinition & {
+  isCouponUsage?: boolean;
 };
 
 const asRows = (value: unknown) => (Array.isArray(value) ? value.filter((v): v is Record<string, unknown> => typeof v === "object" && v !== null) : []);
@@ -285,9 +289,30 @@ const PEAK_SALES_TIME_COLUMNS: ReportColumn[] = [
   { key: "avg_order_value", label: "Avg Order Value" },
 ];
 
+const COUPON_USAGE_COLUMNS: ReportColumn[] = [
+  { key: "id", label: "ID" },
+  { key: "user", label: "User" },
+  { key: "coupon", label: "Coupon" },
+  { key: "order", label: "Order" },
+  { key: "discount_amount", label: "Discount Amount" },
+  { key: "used_at", label: "Used At" },
+];
+
+const ADMIN_REPORT_DEFINITIONS: AdminReportDefinition[] = [
+  ...REPORT_DEFINITIONS,
+  {
+    key: "coupon-usage",
+    name: "Coupon Usage Report",
+    desc: "Coupon usage report with search and date filters",
+    endpoint: "coupons/usage/",
+    isCouponUsage: true,
+  },
+];
+
 export default function Reports() {
   const token = localStorage.getItem("access");
-  const [selectedReport, setSelectedReport] = useState<string>(REPORT_DEFINITIONS[0]?.name ?? "");
+  const [selectedReportKey, setSelectedReportKey] = useState<string>(ADMIN_REPORT_DEFINITIONS[0]?.key ?? "");
+  const [couponSearch, setCouponSearch] = useState("");
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
   const [orderType, setOrderType] = useState("");
@@ -301,7 +326,7 @@ export default function Reports() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const selectedMeta = REPORT_DEFINITIONS.find((r) => r.name === selectedReport);
+  const selectedMeta = ADMIN_REPORT_DEFINITIONS.find((r) => r.key === selectedReportKey);
 
   const summaryRows = useMemo(() => asRows(payload.summary), [payload.summary]);
   const dataRows = useMemo(() => asRows(payload.data), [payload.data]);
@@ -335,6 +360,7 @@ export default function Reports() {
       if (activeReportKey === "online") return ONLINE_COLUMNS;
       if (activeReportKey === "combo") return COMBO_COLUMNS;
       if (activeReportKey === "peak-sales-time") return PEAK_SALES_TIME_COLUMNS;
+      if (activeReportKey === "coupon-usage") return COUPON_USAGE_COLUMNS;
       return inferColumns(dataRows);
     },
     [activeReportKey, dataRows],
@@ -355,15 +381,32 @@ export default function Reports() {
     if (paymentMethod) qs.set("payment_method", paymentMethod);
     if (supplier) qs.set("supplier", supplier);
     if (category) qs.set("category", category);
+    if (selectedMeta.isCouponUsage && couponSearch.trim()) qs.set("q", couponSearch.trim());
 
-    const url = `${API_BASE}/api/reports/${selectedMeta.endpoint}${qs.toString() ? `?${qs.toString()}` : ""}`;
+    const endpointPrefix = selectedMeta.isCouponUsage ? "" : "v2/";
+    const url = `${API_BASE}/api/reports/${endpointPrefix}${selectedMeta.endpoint}${qs.toString() ? `?${qs.toString()}` : ""}`;
     setLoading(true);
     setError(null);
     try {
       const res = await fetch(url, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
       if (!res.ok) throw new Error("Failed to load report");
-      const json = (await res.json()) as ReportPayload;
-      setPayload(json);
+      const json = (await res.json()) as ReportPayload & { records?: Record<string, unknown>[] };
+      if (selectedMeta.isCouponUsage) {
+        const records = asRows(json.records);
+        const summary = (json.summary ?? {}) as Record<string, unknown>;
+        setPayload({
+          summary: [
+            {
+              records: Number(summary.records ?? records.length),
+              total_discount: Number(summary.total_discount ?? 0),
+            },
+          ],
+          data: records,
+          product_breakdown: [],
+        });
+      } else {
+        setPayload(json);
+      }
       setActiveReport(selectedMeta.name);
       setActiveReportKey(selectedMeta.key);
     } catch {
@@ -432,13 +475,23 @@ export default function Reports() {
 
       <div className="rounded-2xl border border-violet-200/70 bg-white p-4 shadow-[0_12px_28px_rgba(15,23,42,0.08)]">
         <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
-          <select value={selectedReport} onChange={(e) => setSelectedReport(e.target.value)} className="h-10 rounded-xl border border-violet-200 bg-white px-3 text-sm text-slate-800 outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-300/40">
-            {REPORT_DEFINITIONS.map((r) => <option key={r.key} value={r.name}>{r.name}</option>)}
+          <select value={selectedReportKey} onChange={(e) => setSelectedReportKey(e.target.value)} className="h-10 rounded-xl border border-violet-200 bg-white px-3 text-sm text-slate-800 outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-300/40">
+            {ADMIN_REPORT_DEFINITIONS.map((r) => <option key={r.key} value={r.key}>{r.name}</option>)}
           </select>
           <input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} className="h-10 rounded-xl border border-violet-200 bg-white px-3 text-sm text-slate-800 outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-300/40" />
           <input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} className="h-10 rounded-xl border border-violet-200 bg-white px-3 text-sm text-slate-800 outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-300/40" />
           <button onClick={() => void loadReport()} disabled={loading || !selectedMeta} className="rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-[0_10px_20px_rgba(79,70,229,0.22)] disabled:opacity-50">{loading ? "Loading..." : "Load Report"}</button>
         </div>
+        {selectedMeta?.isCouponUsage ? (
+          <div className="mt-3">
+            <input
+              value={couponSearch}
+              onChange={(e) => setCouponSearch(e.target.value)}
+              placeholder="Search user, coupon, order"
+              className="h-10 w-full rounded-xl border border-violet-200 bg-white px-3 text-sm text-slate-800 outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-300/40 md:max-w-sm"
+            />
+          </div>
+        ) : null}
         
         {selectedMeta ? <p className="mt-2 text-xs text-slate-500">{selectedMeta.desc}</p> : null}
       </div>
@@ -493,7 +546,6 @@ export default function Reports() {
     </div>
   );
 }
-
 
 
 

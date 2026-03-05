@@ -1,5 +1,5 @@
 import StatusBadge from '@/components/StatusBadge';
-import { Download, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Download, ChevronLeft, ChevronRight, AlertTriangle } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { motion } from "framer-motion";
 import jsPDF from "jspdf";
@@ -101,6 +101,9 @@ const Invoices = () => {
   const [isInvoiceModalOpen, setIsInvoiceModalOpen] = useState(false);
   const [selectedInvoice, setSelectedInvoice] = useState<InvoiceDetail | null>(null);
   const [loadingInvoiceId, setLoadingInvoiceId] = useState<string | null>(null);
+  const [cancelTargetInvoice, setCancelTargetInvoice] = useState<InvoiceRow | null>(null);
+  const [cancelRequestingPk, setCancelRequestingPk] = useState<string | null>(null);
+  const [cancelErrorText, setCancelErrorText] = useState("");
 
   const getAuthHeaders = () => {
     const token = localStorage.getItem("access");
@@ -312,16 +315,25 @@ const Invoices = () => {
     }
   };
 
-  const onCancelOrder = async (invoice: InvoiceRow) => {
+  const openCancelOrderModal = (invoice: InvoiceRow) => {
     if (!invoice.orderPk || invoice.status === "cancelled") return;
-    const isPaid = invoice.status === "paid";
-    const confirmMessage = isPaid
-      ? "This will refund stock and cancel the paid order. Continue?"
-      : "Cancel this order?";
-    const ok = window.confirm(confirmMessage);
-    if (!ok) return;
+    setCancelErrorText("");
+    setCancelTargetInvoice(invoice);
+  };
+
+  const closeCancelOrderModal = () => {
+    if (cancelRequestingPk) return;
+    setCancelErrorText("");
+    setCancelTargetInvoice(null);
+  };
+
+  const confirmCancelOrder = async () => {
+    if (!cancelTargetInvoice?.orderPk || cancelTargetInvoice.status === "cancelled") return;
+    const invoice = cancelTargetInvoice;
 
     try {
+      setCancelRequestingPk(invoice.orderPk);
+      setCancelErrorText("");
       const res = await fetch(`${API_BASE}/api/orders/cancel/${invoice.orderPk}/`, {
         method: "POST",
         headers: getAuthHeaders(),
@@ -339,9 +351,12 @@ const Invoices = () => {
             : row
         )
       );
+      setCancelTargetInvoice(null);
     } catch (error) {
       console.error("Failed to cancel order:", error);
-      alert(error instanceof Error ? error.message : "Failed to cancel order.");
+      setCancelErrorText(error instanceof Error ? error.message : "Failed to cancel order.");
+    } finally {
+      setCancelRequestingPk(null);
     }
   };
 
@@ -743,10 +758,11 @@ const Invoices = () => {
                       </button>
                       {inv.status !== "cancelled" && (
                         <button
-                          onClick={() => void onCancelOrder(inv)}
-                          className="rounded-lg border border-rose-200 px-2.5 py-1 text-xs font-medium text-rose-600 hover:bg-rose-50"
+                          onClick={() => openCancelOrderModal(inv)}
+                          disabled={cancelRequestingPk === inv.orderPk}
+                          className="rounded-lg border border-rose-200 px-2.5 py-1 text-xs font-medium text-rose-600 hover:bg-rose-50 disabled:opacity-60"
                         >
-                          {inv.status === "paid" ? "Refund & Cancel" : "Cancel"}
+                          {cancelRequestingPk === inv.orderPk ? "Cancelling..." : inv.status === "paid" ? "Refund & Cancel" : "Cancel"}
                         </button>
                       )}
                     </div>
@@ -765,6 +781,58 @@ const Invoices = () => {
           </div>
         </div>
       </section>
+
+      {cancelTargetInvoice && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-2xl border border-rose-200 bg-white p-5 shadow-2xl">
+            <div className="flex items-start gap-3">
+              <div className="rounded-xl bg-rose-100 p-2 text-rose-600">
+                <AlertTriangle className="h-5 w-5" />
+              </div>
+              <div className="flex-1">
+                <h3 className="text-lg font-semibold text-slate-900">Cancel Order</h3>
+                <p className="mt-1 text-sm text-slate-600">
+                  {cancelTargetInvoice.status === "paid"
+                    ? "This will refund stock and cancel the paid order."
+                    : "This action will cancel the selected order."}
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm">
+              <p><span className="font-medium text-slate-700">Invoice:</span> {cancelTargetInvoice.id}</p>
+              <p><span className="font-medium text-slate-700">Customer:</span> {cancelTargetInvoice.customer}</p>
+              <p><span className="font-medium text-slate-700">Amount:</span> {cancelTargetInvoice.amount}</p>
+            </div>
+
+            {cancelErrorText && (
+              <p className="mt-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+                {cancelErrorText}
+              </p>
+            )}
+
+            <div className="mt-5 flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={closeCancelOrderModal}
+                disabled={Boolean(cancelRequestingPk)}
+                className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-100 disabled:opacity-60"
+              >
+                Keep Order
+              </button>
+              <button
+                type="button"
+                onClick={() => void confirmCancelOrder()}
+                disabled={Boolean(cancelRequestingPk)}
+                data-enter-action="true"
+                className="rounded-lg bg-rose-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-rose-700 disabled:opacity-60"
+              >
+                {cancelRequestingPk ? "Cancelling..." : cancelTargetInvoice.status === "paid" ? "Refund & Cancel" : "Cancel Order"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {isInvoiceModalOpen && selectedInvoice && (
         <div className="fixed inset-0 z-50 bg-black/50 p-4 sm:p-6 flex items-center justify-center">

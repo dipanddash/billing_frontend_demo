@@ -13,6 +13,7 @@ const adminNav: NavItem[] = [
   { label: "Dashboard", path: "/admin" },
   { label: "Invoices", path: "/admin/invoices" },
   { label: "Products", path: "/admin/products" },
+  { label: "Coupons", path: "/admin/coupons" },
   { label: "Customers", path: "/admin/customers" },
   { label: "Vendors", path: "/admin/vendors" },
   { label: "Reports", path: "/admin/reports" },

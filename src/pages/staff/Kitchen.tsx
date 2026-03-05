@@ -17,6 +17,7 @@ interface OrderItem {
   name: string;
   qty: number;
   image?: string | null;
+  addonSummary?: string;
 }
 
 interface KitchenOrder {
@@ -123,6 +124,7 @@ const Kitchen = () => {
               image: i.product_image
                 ? `${BASE_URL}${i.product_image as string}`
                 : null,
+              addonSummary: String(i.addon_summary ?? ""),
             }))
           : [],
 
@@ -305,7 +307,10 @@ const OrderCard = ({
 
           {order.items.map((i, idx) => (
             <li key={idx} className="flex items-center justify-between gap-2">
-              <span className="truncate">{i.name}</span>
+              <span className="truncate">
+                {i.name}
+                {i.addonSummary ? ` (+ ${i.addonSummary})` : ""}
+              </span>
               <span className="font-semibold text-slate-500">x{i.qty}</span>
             </li>
           ))}

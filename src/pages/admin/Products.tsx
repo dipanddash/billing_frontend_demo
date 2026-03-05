@@ -41,6 +41,19 @@ interface ProductForm {
   isActive: boolean;
 }
 
+interface Addon {
+  id: string;
+  name: string;
+  price: number;
+  image_url: string;
+}
+
+interface AddonForm {
+  name: string;
+  price: string;
+  image: File | null;
+}
+
 interface CategoryForm {
   name: string;
   image: File | null;
@@ -96,6 +109,8 @@ interface ComboForm {
 
 type ApiRecord = Record<string, unknown>;
 const COMBO_CATEGORY_NAME = "Combo";
+const CATALOG_PRODUCTS = "products";
+const CATALOG_ADDONS = "addons";
 
 const initialProductForm: ProductForm = {
   name: "",
@@ -108,6 +123,12 @@ const initialProductForm: ProductForm = {
 
 const initialCategoryForm: CategoryForm = {
   name: "",
+  image: null,
+};
+
+const initialAddonForm: AddonForm = {
+  name: "",
+  price: "",
   image: null,
 };
 
@@ -126,10 +147,12 @@ const placeholderCategoryImage =
 
 const AdminProducts = () => {
   const [search, setSearch] = useState("");
+  const [catalogMode, setCatalogMode] = useState(CATALOG_PRODUCTS);
   const [activeCategory, setActiveCategory] = useState("All");
 
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [addons, setAddons] = useState<Addon[]>([]);
   const [combos, setCombos] = useState<Combo[]>([]);
   const [comboLoading, setComboLoading] = useState(false);
   const [showComboModal, setShowComboModal] = useState(false);
@@ -141,6 +164,11 @@ const AdminProducts = () => {
   const [showProductModal, setShowProductModal] = useState(false);
   const [editProduct, setEditProduct] = useState<Product | null>(null);
   const [productForm, setProductForm] = useState<ProductForm>(initialProductForm);
+  const [showAddonModal, setShowAddonModal] = useState(false);
+  const [editAddon, setEditAddon] = useState<Addon | null>(null);
+  const [addonForm, setAddonForm] = useState<AddonForm>(initialAddonForm);
+  const [isSavingAddon, setIsSavingAddon] = useState(false);
+  const [showDeleteAddonModal, setShowDeleteAddonModal] = useState(false);
 
   const [showCategoryModal, setShowCategoryModal] = useState(false);
   const [categoryForm, setCategoryForm] = useState<CategoryForm>(initialCategoryForm);
@@ -172,6 +200,7 @@ const AdminProducts = () => {
   useEffect(() => {
     void fetchProducts();
     void fetchCategories();
+    void fetchAddons();
   }, []);
 
   const fetchProducts = async () => {
@@ -230,6 +259,33 @@ const AdminProducts = () => {
       ]);
     } catch (err) {
       console.error("Fetch categories error:", err);
+    }
+  };
+
+  const fetchAddons = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/api/products/addons/`, {
+        headers: getAuthHeaders(),
+      });
+
+      if (!res.ok) {
+        setAddons([]);
+        return;
+      }
+
+      const data = await res.json();
+      const list: ApiRecord[] = Array.isArray(data) ? data : [];
+
+      const mapped: Addon[] = list.map((item) => ({
+        id: String(item.id ?? ""),
+        name: String(item.name ?? ""),
+        price: Number(item.price ?? 0),
+        image_url: String(item.image_url ?? item.image ?? ""),
+      }));
+      setAddons(mapped);
+    } catch (err) {
+      console.error("Fetch addons error:", err);
+      setAddons([]);
     }
   };
 
@@ -340,6 +396,12 @@ const AdminProducts = () => {
     return combos.filter((c) => c.name.toLowerCase().includes(search.toLowerCase()));
   }, [combos, search]);
 
+  const filteredAddons = useMemo(() => {
+    return addons.filter((addon) =>
+      addon.name.toLowerCase().includes(search.toLowerCase())
+    );
+  }, [addons, search]);
+
   const selectedCategoryObj = useMemo(
     () => categories.find((c) => c.id === productForm.categoryId),
     [categories, productForm.categoryId]
@@ -375,6 +437,22 @@ const AdminProducts = () => {
   const openEditProductModal = (product: Product) => {
     setEditMode(product);
     setShowProductModal(true);
+  };
+
+  const openAddAddonModal = () => {
+    setEditAddon(null);
+    setAddonForm(initialAddonForm);
+    setShowAddonModal(true);
+  };
+
+  const openEditAddonModal = (addon: Addon) => {
+    setEditAddon(addon);
+    setAddonForm({
+      name: addon.name,
+      price: String(addon.price),
+      image: null,
+    });
+    setShowAddonModal(true);
   };
 
   const openRecipeModal = async (product: Product) => {
@@ -480,6 +558,12 @@ const AdminProducts = () => {
     setProductForm(initialProductForm);
   };
 
+  const closeAddonModal = () => {
+    setShowAddonModal(false);
+    setEditAddon(null);
+    setAddonForm(initialAddonForm);
+  };
+
   const openAddCategoryModal = () => {
     setEditCategory(null);
     setCategoryForm(initialCategoryForm);
@@ -554,6 +638,47 @@ const AdminProducts = () => {
       setStatusText("Could not save product.");
     } finally {
       setIsSavingProduct(false);
+    }
+  };
+
+  const saveAddon = async () => {
+    if (!addonForm.name.trim() || !addonForm.price) {
+      setStatusText("Addon name and price are required.");
+      return;
+    }
+
+    setIsSavingAddon(true);
+    const formData = new FormData();
+    formData.append("name", addonForm.name.trim());
+    formData.append("price", addonForm.price);
+    if (addonForm.image) {
+      formData.append("image", addonForm.image);
+    }
+
+    try {
+      const url = editAddon
+        ? `${API_BASE}/api/products/addons/${editAddon.id}/`
+        : `${API_BASE}/api/products/addons/`;
+
+      const res = await fetch(url, {
+        method: editAddon ? "PUT" : "POST",
+        headers: getAuthHeaders(),
+        body: formData,
+      });
+
+      if (!res.ok) {
+        setStatusText(editAddon ? "Could not update addon." : "Could not create addon.");
+        return;
+      }
+
+      await fetchAddons();
+      setStatusText(editAddon ? "Addon updated." : "Addon created.");
+      closeAddonModal();
+    } catch (err) {
+      console.error("Save addon error:", err);
+      setStatusText(editAddon ? "Could not update addon." : "Could not create addon.");
+    } finally {
+      setIsSavingAddon(false);
     }
   };
 
@@ -654,6 +779,30 @@ const AdminProducts = () => {
     } catch (err) {
       console.error("Delete failed:", err);
       setStatusText("Failed to delete product.");
+    }
+  };
+
+  const deleteAddon = async () => {
+    if (!editAddon) return;
+
+    try {
+      const res = await fetch(`${API_BASE}/api/products/addons/${editAddon.id}/`, {
+        method: "DELETE",
+        headers: getAuthHeaders(),
+      });
+
+      if (!res.ok) {
+        setStatusText("Failed to delete addon.");
+        return;
+      }
+
+      await fetchAddons();
+      setStatusText("Addon deleted.");
+      setShowDeleteAddonModal(false);
+      setEditAddon(null);
+    } catch (err) {
+      console.error("Delete addon failed:", err);
+      setStatusText("Failed to delete addon.");
     }
   };
 
@@ -910,24 +1059,53 @@ const saveCombo = async () => {
           <div>
             <h1 className="text-2xl font-bold tracking-tight">Products</h1>
             <p className="text-xs text-muted-foreground mt-1">Design, manage, and publish your full cafe menu.</p>
+            <div className="mt-3 inline-flex rounded-full border border-violet-200 bg-white p-1 text-xs font-semibold">
+              <button
+                onClick={() => setCatalogMode(CATALOG_PRODUCTS)}
+                className={`rounded-full px-3 py-1 ${catalogMode === CATALOG_PRODUCTS ? "bg-violet-600 text-white" : "text-violet-700"}`}
+              >
+                Products
+              </button>
+              <button
+                onClick={() => {
+                  setCatalogMode(CATALOG_ADDONS);
+                  void fetchAddons();
+                }}
+                className={`rounded-full px-3 py-1 ${catalogMode === CATALOG_ADDONS ? "bg-violet-600 text-white" : "text-violet-700"}`}
+              >
+                Addons
+              </button>
+            </div>
           </div>
 
           <div className="flex items-center gap-2">
-            <button
-              onClick={openAddCategoryModal}
-              className="inline-flex items-center gap-1.5 px-4 py-2 text-sm rounded-full border border-purple-300 bg-white hover:bg-purple-50 transition"
-            >
-              <Layers className="w-3.5 h-3.5" />
-              Add Category
-            </button>
+            {catalogMode === CATALOG_PRODUCTS && (
+              <button
+                onClick={openAddCategoryModal}
+                className="inline-flex items-center gap-1.5 px-4 py-2 text-sm rounded-full border border-purple-300 bg-white hover:bg-purple-50 transition"
+              >
+                <Layers className="w-3.5 h-3.5" />
+                Add Category
+              </button>
+            )}
 
             <button
-              onClick={activeCategory === COMBO_CATEGORY_NAME ? openAddComboModal : openAddProductModal}
+              onClick={openAddAddonModal}
               className="inline-flex items-center gap-1.5 px-4 py-2 text-sm rounded-full bg-purple-600 text-white hover:bg-purple-700 transition"
             >
               <Plus className="w-3.5 h-3.5" />
-              {activeCategory === COMBO_CATEGORY_NAME ? "Add Combo" : "Add Product"}
+              Add Addon
             </button>
+
+            {catalogMode === CATALOG_PRODUCTS && (
+              <button
+                onClick={activeCategory === COMBO_CATEGORY_NAME ? openAddComboModal : openAddProductModal}
+                className="inline-flex items-center gap-1.5 px-4 py-2 text-sm rounded-full bg-purple-600 text-white hover:bg-purple-700 transition"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                {activeCategory === COMBO_CATEGORY_NAME ? "Add Combo" : "Add Product"}
+              </button>
+            )}
           </div>
         </div>
 
@@ -941,6 +1119,7 @@ const saveCombo = async () => {
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+        {catalogMode === CATALOG_PRODUCTS && (
         <aside className="lg:col-span-3 xl:col-span-3 h-fit rounded-2xl border border-purple-100 bg-gradient-to-b from-white to-violet-50/60 p-3 shadow-sm">
           <div className="mb-3 rounded-xl border border-purple-100 bg-white/90 p-3">
             <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-purple-700">
@@ -1051,23 +1230,83 @@ const saveCombo = async () => {
             </div>
           </div>
         </aside>
+        )}
 
-        <section className="lg:col-span-9 xl:col-span-9">
+        <section className={catalogMode === CATALOG_PRODUCTS ? "lg:col-span-9 xl:col-span-9" : "lg:col-span-12 xl:col-span-12"}>
           <div className="relative mb-4 flex items-center justify-between gap-3">
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder={activeCategory === COMBO_CATEGORY_NAME ? "Search combos..." : "Search products..."}
+              placeholder={
+                catalogMode === CATALOG_ADDONS
+                  ? "Search addons..."
+                  : activeCategory === COMBO_CATEGORY_NAME
+                  ? "Search combos..."
+                  : "Search products..."
+              }
               className="w-full md:w-[360px] rounded-xl border border-purple-200 bg-white py-2.5 pl-10 pr-3 text-sm shadow-sm outline-none focus:border-purple-400"
             />
            
             <span className="hidden rounded-full border border-violet-200 bg-white px-3 py-1.5 text-xs font-medium text-violet-700 md:inline-flex">
-              {activeCategory === "All" ? "All Categories" : activeCategory}
+              {catalogMode === CATALOG_ADDONS
+                ? "All Addons"
+                : activeCategory === "All"
+                ? "All Categories"
+                : activeCategory}
             </span>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-4">
-            {activeCategory !== COMBO_CATEGORY_NAME &&
+          <div
+            className={
+              catalogMode === CATALOG_ADDONS
+                ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 2xl:grid-cols-5 gap-4"
+                : "grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-4"
+            }
+          >
+            {catalogMode === CATALOG_ADDONS &&
+              filteredAddons.map((addon, idx) => (
+              <motion.div
+                key={addon.id}
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: idx * 0.03 }}
+                className="bg-white border rounded-xl overflow-hidden shadow-sm hover:shadow-md transition"
+              >
+                <div className="h-36 bg-purple-50 relative">
+                  {addon.image_url ? (
+                    <img src={addon.image_url} alt={addon.name} className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="h-full flex items-center justify-center text-xl">Addon</div>
+                  )}
+                </div>
+
+                <div className="p-3">
+                  <h3 className="font-semibold text-sm leading-tight">{addon.name}</h3>
+                  <div className="mt-3 flex items-center justify-between">
+                    <p className="text-base font-bold">Rs.{addon.price.toFixed(2)}</p>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        onClick={() => openEditAddonModal(addon)}
+                        className="w-7 h-7 rounded-full border flex items-center justify-center hover:bg-purple-50"
+                      >
+                        <Edit2 className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        onClick={() => {
+                          setEditAddon(addon);
+                          setShowDeleteAddonModal(true);
+                        }}
+                        className="w-7 h-7 rounded-full border border-rose-200 text-rose-600 flex items-center justify-center hover:bg-rose-50"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </motion.div>
+            ))}
+
+            {catalogMode === CATALOG_PRODUCTS && activeCategory !== COMBO_CATEGORY_NAME &&
               filteredProducts.map((product, idx) => (
               <motion.div
                 key={product.id}
@@ -1140,7 +1379,7 @@ const saveCombo = async () => {
               </motion.div>
             ))}
 
-            {activeCategory === COMBO_CATEGORY_NAME &&
+            {catalogMode === CATALOG_PRODUCTS && activeCategory === COMBO_CATEGORY_NAME &&
               (comboLoading ? (
                 <div className="col-span-full rounded-xl border border-dashed border-violet-200 bg-violet-50 p-5 text-sm text-violet-700">
                   Loading combos...
@@ -1327,6 +1566,47 @@ const saveCombo = async () => {
       </FormModal>
 
       <FormModal
+        open={showAddonModal}
+        title={editAddon ? "Edit Addon" : "Add Addon"}
+        onClose={closeAddonModal}
+      >
+        <div className="space-y-4">
+          <input
+            value={addonForm.name}
+            onChange={(e) => setAddonForm((prev) => ({ ...prev, name: e.target.value }))}
+            placeholder="Addon name"
+            className="w-full border p-2.5 rounded-lg"
+          />
+
+          <input
+            value={addonForm.price}
+            onChange={(e) => setAddonForm((prev) => ({ ...prev, price: e.target.value }))}
+            placeholder="Price"
+            type="number"
+            className="w-full border p-2.5 rounded-lg"
+          />
+
+          <input
+            type="file"
+            onChange={(e) =>
+              setAddonForm((prev) => ({
+                ...prev,
+                image: e.target.files?.[0] ?? null,
+              }))
+            }
+          />
+
+          <button
+            onClick={saveAddon}
+            disabled={isSavingAddon}
+            className="w-full bg-purple-600 hover:bg-purple-700 disabled:opacity-60 text-white py-2.5 rounded-lg"
+          >
+            {isSavingAddon ? "Saving..." : editAddon ? "Update Addon" : "Save Addon"}
+          </button>
+        </div>
+      </FormModal>
+
+      <FormModal
         open={showDeleteCategoryModal}
         title="Delete Category"
         onClose={() => {
@@ -1353,6 +1633,25 @@ const saveCombo = async () => {
             className="w-full bg-red-600 hover:bg-red-700 text-white py-2 rounded-lg"
           >
             Delete
+          </button>
+        </div>
+      </FormModal>
+
+      <FormModal
+        open={showDeleteAddonModal}
+        title="Delete Addon"
+        onClose={() => {
+          setShowDeleteAddonModal(false);
+          setEditAddon(null);
+        }}
+      >
+        <div className="space-y-4">
+          <p>Delete addon "{editAddon?.name}"?</p>
+          <button
+            onClick={deleteAddon}
+            className="w-full bg-red-600 hover:bg-red-700 text-white py-2 rounded-lg"
+          >
+            Delete Addon
           </button>
         </div>
       </FormModal>

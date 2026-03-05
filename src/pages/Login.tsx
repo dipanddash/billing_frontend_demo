@@ -12,12 +12,15 @@ const Login = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [selectedRole, setSelectedRole] = useState<"ADMIN" | "STAFF">("ADMIN");
   const [error, setError] = useState("");
+  const [isSigningIn, setIsSigningIn] = useState(false);
 
   const navigate = useNavigate();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSigningIn) return;
     setError("");
+    setIsSigningIn(true);
 
     try {
       const loginResponse = await fetch("http://192.168.1.18:8000/api/accounts/login/", {
@@ -66,6 +69,8 @@ const Login = () => {
       }
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Login failed");
+    } finally {
+      setIsSigningIn(false);
     }
   };
 
@@ -177,10 +182,11 @@ const Login = () => {
 
                 <button
                   type="submit"
-                  className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-full bg-[linear-gradient(135deg,#7f56d9_0%,#6f43cf_100%)] text-sm font-semibold text-white shadow-[0_10px_22px_rgba(111,67,207,0.34)] transition hover:opacity-95"
+                  disabled={isSigningIn}
+                  className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-full bg-[linear-gradient(135deg,#7f56d9_0%,#6f43cf_100%)] text-sm font-semibold text-white shadow-[0_10px_22px_rgba(111,67,207,0.34)] transition hover:brightness-110 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-75"
                 >
-                  Sign In
-                  <ArrowRight className="h-4 w-4" />
+                  {isSigningIn ? "Signing in..." : "Sign In"}
+                  <ArrowRight className={`h-4 w-4 transition ${isSigningIn ? "translate-x-1 animate-pulse" : ""}`} />
                 </button>
               </form>
 

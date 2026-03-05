@@ -47,16 +47,32 @@ interface Combo {
   availability_reason?: string | null;
 }
 
+interface Addon {
+  id: string;
+  name: string;
+  price: number;
+  image?: string;
+}
+
+interface SelectedAddon {
+  id: string;
+  name: string;
+  price: number;
+  qty: number;
+}
+
 interface CartItem {
   key: string;
   type: "product" | "combo";
   id: string;
   name: string;
   price: number;
+  basePrice?: number;
   qty: number;
   image?: string;
   gst_percent: number;
   comboItems?: ComboItem[];
+  selectedAddons?: SelectedAddon[];
 }
 
 interface OrderDetails {
@@ -64,6 +80,7 @@ interface OrderDetails {
   order_type: string;
   customer_name: string;
   phone?: string;
+  customer_phone?: string;
   table_number?: string;
   token_number?: string;
   session?: string;
@@ -73,6 +90,38 @@ interface PendingSelection {
   type: "product" | "combo";
   product?: Product;
   combo?: Combo;
+  selectedAddons?: SelectedAddon[];
+  mode?: "add" | "edit";
+  editingCartKey?: string;
+}
+
+interface InvoiceLineItem {
+  name: string;
+  quantity: number;
+  base_price: number;
+  line_total: number;
+}
+
+interface InvoiceData {
+  bill_number: string;
+  date: string;
+  customer_name: string;
+  staff?: string;
+  subtotal: number | string;
+  total_gst: number | string;
+  discount: number | string;
+  final_amount: number | string;
+  line_items?: InvoiceLineItem[];
+  items?: InvoiceLineItem[];
+}
+
+interface AppliedCoupon {
+  id: number;
+  code: string;
+  discount_type: "AMOUNT" | "PERCENT";
+  value: number;
+  min_order_amount: number;
+  max_discount_amount: number | null;
 }
 
 /* ================= COMPONENT ================= */
@@ -93,6 +142,7 @@ export default function SalesTransactionPage() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [combos, setCombos] = useState<Combo[]>([]);
+  const [addons, setAddons] = useState<Addon[]>([]);
   const [activeCategory, setActiveCategory] = useState("All");
   const [search, setSearch] = useState("");
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -109,6 +159,11 @@ export default function SalesTransactionPage() {
   const [pendingSelection, setPendingSelection] = useState<PendingSelection | null>(null);
   const [pendingQty, setPendingQty] = useState("1");
   const [pendingQtyError, setPendingQtyError] = useState("");
+  const [pendingAddonSearch, setPendingAddonSearch] = useState("");
+  const [showAllAddonsModal, setShowAllAddonsModal] = useState(false);
+  const [pendingAddonEditorId, setPendingAddonEditorId] = useState<string | null>(null);
+  const [pendingAddonEditorQty, setPendingAddonEditorQty] = useState("1");
+  const [pendingAddonEditorError, setPendingAddonEditorError] = useState("");
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState<"CASH" | "CARD" | "UPI">("CASH");
   const [paymentReference, setPaymentReference] = useState("");
@@ -116,9 +171,15 @@ export default function SalesTransactionPage() {
   const [discountPercentInput, setDiscountPercentInput] = useState("");
   const [discountAmountInput, setDiscountAmountInput] = useState("");
   const [discountMode, setDiscountMode] = useState<"percent" | "amount">("amount");
+  const [couponCodeInput, setCouponCodeInput] = useState("");
+  const [appliedCoupon, setAppliedCoupon] = useState<AppliedCoupon | null>(null);
+  const [applyingCoupon, setApplyingCoupon] = useState(false);
+  const [couponError, setCouponError] = useState("");
   const [paymentError, setPaymentError] = useState("");
   const [paying, setPaying] = useState(false);
   const [markingPending, setMarkingPending] = useState(false);
+  const [invoiceData, setInvoiceData] = useState<InvoiceData | null>(null);
+  const [invoiceLoading, setInvoiceLoading] = useState(false);
   const [isSearchFocused, setIsSearchFocused] = useState(false);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const searchDropdownRef = useRef<HTMLDivElement | null>(null);
@@ -151,6 +212,30 @@ export default function SalesTransactionPage() {
 
   const getContextError = () =>
     "Select Dine In or Take Away first. Products are locked until billing starts.";
+
+  const getApiErrorMessage = (err: unknown, fallback: string): string => {
+    if (Array.isArray(err)) {
+      return err.length > 0 ? String(err[0]) : fallback;
+    }
+    if (err && typeof err === "object") {
+      const obj = err as Record<string, unknown>;
+      const detail = obj["detail"];
+      if (Array.isArray(detail) && detail.length > 0) return String(detail[0]);
+      return String(obj["detail"] ?? obj["error"] ?? obj["message"] ?? obj["raw"] ?? fallback);
+    }
+    return fallback;
+  };
+
+  const getCreatedOrderId = (value: unknown): string => {
+    if (!value || typeof value !== "object") return "";
+    const obj = value as Record<string, unknown>;
+    const nestedOrder = obj["order"];
+    const nestedOrderId =
+      nestedOrder && typeof nestedOrder === "object"
+        ? (nestedOrder as Record<string, unknown>)["id"]
+        : undefined;
+    return String(obj["id"] ?? obj["order_id"] ?? nestedOrderId ?? "");
+  };
 
   const startTakeawayFromPos = async () => {
     if (!token || creatingTakeaway) return;
@@ -198,14 +283,12 @@ export default function SalesTransactionPage() {
           break;
         }
 
-        const err = await res.json().catch(() => ({}));
-        lastError = String(
-          err?.detail ?? err?.error ?? err?.message ?? `Take Away failed (HTTP ${res.status}).`
-        );
+        const err: unknown = await res.json().catch(() => ({}));
+        lastError = getApiErrorMessage(err, `Take Away failed (HTTP ${res.status}).`);
       }
 
       if (!data) throw new Error(lastError);
-      const createdId = String(data?.id ?? data?.order_id ?? data?.order?.id ?? "");
+      const createdId = getCreatedOrderId(data);
       if (!createdId) throw new Error("Takeaway order created but id missing.");
       setRuntimeOrderId(createdId);
       setPosNotice("");
@@ -250,14 +333,12 @@ export default function SalesTransactionPage() {
           break;
         }
 
-        const err = await res.json().catch(() => ({}));
-        lastError = String(
-          err?.detail ?? err?.error ?? err?.message ?? `${partner} failed (HTTP ${res.status}).`
-        );
+        const err: unknown = await res.json().catch(() => ({}));
+        lastError = getApiErrorMessage(err, `${partner} failed (HTTP ${res.status}).`);
       }
 
       if (!data) throw new Error(lastError);
-      const createdId = String(data?.id ?? data?.order_id ?? data?.order?.id ?? "");
+      const createdId = getCreatedOrderId(data);
       if (!createdId) throw new Error(`${partner} order created but id missing.`);
 
       setRuntimeOrderId(createdId);
@@ -327,6 +408,21 @@ export default function SalesTransactionPage() {
         }));
         setCombos(mapped);
       });
+
+    fetch(`${BASE_URL}/api/products/addons/`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then(r => r.json())
+      .then((d) => {
+        const list = Array.isArray(d) ? d : [];
+        const mapped: Addon[] = list.map((addon: Record<string, unknown>) => ({
+          id: String(addon.id ?? ""),
+          name: String(addon.name ?? ""),
+          price: Number(addon.price ?? 0),
+          image: String(addon.image_url ?? addon.image ?? ""),
+        }));
+        setAddons(mapped);
+      });
   }, [token]);
 
   useEffect(() => {
@@ -346,7 +442,7 @@ export default function SalesTransactionPage() {
       void startPartnerOrderFromPos(quickStartOrderType as "SWIGGY" | "ZOMATO");
       navigate("/staff/pos", { replace: true });
     }
-  }, [quickStartOrderType, token]);
+  }, [quickStartOrderType, token]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /* ================= LOAD ORDER DETAILS ================= */
 
@@ -385,33 +481,72 @@ export default function SalesTransactionPage() {
     activeCategory === "Combo" && c.name.toLowerCase().includes(search.toLowerCase())
   );
 
+  const filteredPendingAddons = useMemo(() => {
+    const term = pendingAddonSearch.trim().toLowerCase();
+    if (!term) return addons;
+    return addons.filter((addon) => addon.name.toLowerCase().includes(term));
+  }, [addons, pendingAddonSearch]);
+  const previewPendingAddons = useMemo(() => filteredPendingAddons.slice(0, 4), [filteredPendingAddons]);
+
+  const pendingSelectedAddons = useMemo(
+    () => (pendingSelection?.type === "product" ? pendingSelection.selectedAddons ?? [] : []),
+    [pendingSelection]
+  );
+
+  const pendingAddonUnitTotal = useMemo(
+    () => pendingSelectedAddons.reduce((sum, addon) => sum + addon.price * addon.qty, 0),
+    [pendingSelectedAddons]
+  );
+
+  const pendingProductUnitPrice = useMemo(() => {
+    if (pendingSelection?.type !== "product" || !pendingSelection.product) return 0;
+    return Number(pendingSelection.product.price || 0) + pendingAddonUnitTotal;
+  }, [pendingAddonUnitTotal, pendingSelection]);
+  const isEditingPendingSelection = pendingSelection?.mode === "edit";
+
   /* ================= CART ================= */
 
-  const addToCart = (p: Product, qty = 1) => {
+  const buildProductCartItem = (p: Product, qty = 1, selectedAddonRows: SelectedAddon[] = []) => {
+    const selectedAddons = selectedAddonRows
+      .filter((addon) => addon.qty > 0)
+      .map((addon) => ({
+        ...addon,
+        qty: Math.max(1, Math.floor(addon.qty)),
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+    const addonKey = selectedAddons.map((addon) => `${addon.id}:${addon.qty}`).join(",");
+    const unitAddonPrice = selectedAddons.reduce((sum, addon) => sum + addon.price * addon.qty, 0);
+    const unitPrice = parseFloat(p.price) + unitAddonPrice;
+    return {
+      key: `product:${p.id}:${addonKey}`,
+      type: "product" as const,
+      id: p.id,
+      name: p.name,
+      price: unitPrice,
+      basePrice: parseFloat(p.price),
+      qty,
+      image: p.image,
+      gst_percent: Number(p.gst_percent || 0),
+      selectedAddons,
+    };
+  };
+
+  const addToCart = (p: Product, qty = 1, selectedAddonRows: SelectedAddon[] = []) => {
     if (!hasBillingContext) {
       setPosNotice(getContextError());
       return;
     }
+    const nextItem = buildProductCartItem(p, qty, selectedAddonRows);
     setCart(prev => {
-      const key = `product:${p.id}`;
-      const ex = prev.find(i => i.key === key);
+      const ex = prev.find(i => i.key === nextItem.key);
       if (ex) {
         return prev.map(i =>
-          i.key === key ? { ...i, qty: i.qty + qty } : i
+          i.key === nextItem.key ? { ...i, qty: i.qty + qty } : i
         );
       }
       return [
         ...prev,
-        {
-          key,
-          type: "product",
-          id: p.id,
-          name: p.name,
-          price: parseFloat(p.price),
-          qty,
-          image: p.image,
-          gst_percent: Number(p.gst_percent || 0),
-        },
+        nextItem,
       ];
     });
   };
@@ -453,9 +588,14 @@ export default function SalesTransactionPage() {
       setPosNotice(product.availability_reason || "This item is out of stock.");
       return;
     }
-    setPendingSelection({ type: "product", product });
+    setPendingSelection({ type: "product", product, selectedAddons: [], mode: "add" });
     setPendingQty("1");
     setPendingQtyError("");
+    setPendingAddonSearch("");
+    setShowAllAddonsModal(false);
+    setPendingAddonEditorId(null);
+    setPendingAddonEditorQty("1");
+    setPendingAddonEditorError("");
   };
 
   const openQtyModalForCombo = (combo: Combo) => {
@@ -467,18 +607,212 @@ export default function SalesTransactionPage() {
       setPosNotice(combo.availability_reason || "This combo is out of stock.");
       return;
     }
-    setPendingSelection({ type: "combo", combo });
+    setPendingSelection({ type: "combo", combo, mode: "add" });
     setPendingQty("1");
     setPendingQtyError("");
+    setPendingAddonSearch("");
+    setShowAllAddonsModal(false);
+    setPendingAddonEditorId(null);
+    setPendingAddonEditorQty("1");
+    setPendingAddonEditorError("");
   };
 
   const closeQtyModal = () => {
     setPendingSelection(null);
     setPendingQty("1");
     setPendingQtyError("");
+    setPendingAddonSearch("");
+    setShowAllAddonsModal(false);
+    setPendingAddonEditorId(null);
+    setPendingAddonEditorQty("1");
+    setPendingAddonEditorError("");
   };
 
-  const confirmPendingQty = () => {
+  const openQtyModalForCartItem = (item: CartItem) => {
+    if (item.type !== "product") return;
+    const mappedProduct =
+      products.find((product) => product.id === item.id) ??
+      ({
+        id: item.id,
+        name: item.name,
+        price: String(item.basePrice ?? item.price),
+        category_name: "",
+        image: item.image ?? "",
+        gst_percent: Number(item.gst_percent || 0),
+        is_available: true,
+      } as Product);
+    setPendingSelection({
+      type: "product",
+      product: mappedProduct,
+      selectedAddons: [...(item.selectedAddons ?? [])],
+      mode: "edit",
+      editingCartKey: item.key,
+    });
+    setPendingQty(String(item.qty));
+    setPendingQtyError("");
+    setPendingAddonSearch("");
+    setShowAllAddonsModal(false);
+    setPendingAddonEditorId(null);
+    setPendingAddonEditorQty("1");
+    setPendingAddonEditorError("");
+  };
+
+  const setPendingAddonQty = (addon: Addon, nextQty: number) => {
+    const qty = Math.floor(nextQty);
+    setPendingSelection((prev) => {
+      if (!prev || prev.type !== "product") return prev;
+      const existing = prev.selectedAddons ?? [];
+      const next = [...existing];
+      const idx = next.findIndex((row) => row.id === addon.id);
+      if (qty <= 0) {
+        return { ...prev, selectedAddons: next.filter((row) => row.id !== addon.id) };
+      }
+      if (idx >= 0) {
+        next[idx] = { ...next[idx], qty };
+      } else {
+        next.push({ id: addon.id, name: addon.name, price: addon.price, qty });
+      }
+      return {
+        ...prev,
+        selectedAddons: next,
+      };
+    });
+  };
+
+  const openPendingAddonQtyEditor = (addon: Addon) => {
+    const currentQty =
+      pendingSelection?.type === "product"
+        ? pendingSelection.selectedAddons?.find((row) => row.id === addon.id)?.qty
+        : undefined;
+    setPendingAddonEditorId(addon.id);
+    setPendingAddonEditorQty(currentQty ? String(currentQty) : "1");
+    setPendingAddonEditorError("");
+  };
+
+  const submitPendingAddonQtyEditor = (addon: Addon) => {
+    const parsed = Math.floor(Number(pendingAddonEditorQty));
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+      setPendingAddonEditorError("Enter a valid addon quantity.");
+      return;
+    }
+    setPendingAddonQty(addon, parsed);
+    setPendingAddonEditorId(null);
+    setPendingAddonEditorQty("1");
+    setPendingAddonEditorError("");
+  };
+
+  const closePendingAddonQtyEditor = () => {
+    setPendingAddonEditorId(null);
+    setPendingAddonEditorQty("1");
+    setPendingAddonEditorError("");
+  };
+
+  const renderAddonRows = (addonList: Addon[]) => (
+    <div className="max-h-64 space-y-2 overflow-y-auto pr-1">
+      {addonList.map((addon) => {
+        const selectedAddon = pendingSelectedAddons.find((row) => row.id === addon.id);
+        const currentQty = selectedAddon?.qty ?? 0;
+        const isEditingThisAddon = pendingAddonEditorId === addon.id;
+        return (
+          <div
+            key={addon.id}
+            className={`rounded-xl border bg-white p-2.5 ${
+              currentQty > 0 ? "border-purple-300 shadow-sm" : "border-purple-100"
+            }`}
+          >
+            <div className="flex items-center gap-3">
+              <img
+                src={
+                  addon.image ||
+                  "https://images.unsplash.com/photo-1473093295043-cdd812d0e601?auto=format&fit=crop&w=120&q=80"
+                }
+                alt={addon.name}
+                className="h-12 w-12 rounded-lg object-cover"
+              />
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-semibold text-purple-950">{addon.name}</p>
+                <p className="text-xs text-purple-700">
+                  Rs {addon.price.toFixed(2)}
+                  {currentQty > 0 ? ` | Added x${currentQty}` : ""}
+                </p>
+              </div>
+              {!isEditingThisAddon && (
+                <button
+                  type="button"
+                  onClick={() => openPendingAddonQtyEditor(addon)}
+                  className="inline-flex items-center gap-1 rounded-full border border-purple-300 bg-purple-100 px-2.5 py-1 text-xs font-semibold text-purple-700 hover:bg-purple-200"
+                >
+                  {currentQty > 0 ? "Edit Qty" : "Add"}
+                </button>
+              )}
+            </div>
+
+            {isEditingThisAddon && (
+              <div className="mt-2 rounded-lg border border-purple-200 bg-purple-50/60 p-2">
+                <div className="flex items-center gap-2">
+                  <Input
+                    autoFocus
+                    type="number"
+                    min={1}
+                    step={1}
+                    value={pendingAddonEditorQty}
+                    onChange={(e) => {
+                      setPendingAddonEditorQty(e.target.value);
+                      if (pendingAddonEditorError) setPendingAddonEditorError("");
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        submitPendingAddonQtyEditor(addon);
+                      }
+                    }}
+                    placeholder="Qty"
+                    className="h-9 rounded-lg border-purple-200 bg-white text-sm text-purple-900"
+                  />
+                  <Button
+                    type="button"
+                    onClick={() => submitPendingAddonQtyEditor(addon)}
+                    className="h-9 bg-[linear-gradient(135deg,#7c3aed_0%,#5b21b6_100%)] px-3 text-xs text-white hover:opacity-95"
+                  >
+                    Enter
+                  </Button>
+                  {currentQty > 0 && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => {
+                        setPendingAddonQty(addon, 0);
+                        closePendingAddonQtyEditor();
+                      }}
+                      className="h-9 border-rose-200 px-3 text-xs text-rose-600 hover:bg-rose-50"
+                    >
+                      Remove
+                    </Button>
+                  )}
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={closePendingAddonQtyEditor}
+                    className="h-9 border-purple-200 px-3 text-xs text-purple-700 hover:bg-purple-50"
+                  >
+                    Cancel
+                  </Button>
+                </div>
+                {pendingAddonEditorError && (
+                  <p className="mt-1 text-xs font-medium text-violet-700">{pendingAddonEditorError}</p>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      })}
+      {addonList.length === 0 && (
+        <p className="text-center text-xs text-purple-600/70">No addons found.</p>
+      )}
+    </div>
+  );
+
+  const confirmPendingQty = (keepOpen = false) => {
     if (!pendingSelection) return;
     const qtyNum = Number(pendingQty);
     if (!Number.isInteger(qtyNum) || qtyNum <= 0) {
@@ -487,9 +821,36 @@ export default function SalesTransactionPage() {
     }
 
     if (pendingSelection.type === "product" && pendingSelection.product) {
-      addToCart(pendingSelection.product, qtyNum);
+      if (pendingSelection.mode === "edit" && pendingSelection.editingCartKey) {
+        const updatedItem = buildProductCartItem(
+          pendingSelection.product,
+          qtyNum,
+          pendingSelection.selectedAddons ?? []
+        );
+        setCart((prev) => {
+          const withoutEditing = prev.filter((item) => item.key !== pendingSelection.editingCartKey);
+          const existingMatch = withoutEditing.find((item) => item.key === updatedItem.key);
+          if (existingMatch) {
+            return withoutEditing.map((item) =>
+              item.key === updatedItem.key ? { ...item, qty: item.qty + updatedItem.qty } : item
+            );
+          }
+          return [...withoutEditing, updatedItem];
+        });
+      } else {
+        addToCart(
+          pendingSelection.product,
+          qtyNum,
+          pendingSelection.selectedAddons ?? []
+        );
+      }
     } else if (pendingSelection.type === "combo" && pendingSelection.combo) {
       addComboToCart(pendingSelection.combo, qtyNum);
+    }
+    if (keepOpen) {
+      setPendingQty("1");
+      setPendingQtyError("");
+      return;
     }
     closeQtyModal();
   };
@@ -558,11 +919,28 @@ export default function SalesTransactionPage() {
 
   const subtotal = cart.reduce((s, i) => s + i.price * i.qty, 0);
 
-  const gst = cart.reduce((s, i) => s + (i.price * i.qty * i.gst_percent) / 100, 0);
+  const gst = cart.reduce((s, i) => {
+    const taxableUnitPrice = i.basePrice ?? i.price;
+    return s + (taxableUnitPrice * i.qty * i.gst_percent) / 100;
+  }, 0);
 
   const grossTotal = subtotal + gst;
   const rawDiscountAmount = parseNonNegative(discountAmountInput) ?? 0;
-  const discountAmount = Math.min(rawDiscountAmount, grossTotal);
+  const manualDiscountAmount = Math.min(rawDiscountAmount, grossTotal);
+  const couponDiscountAmount = (() => {
+    if (!appliedCoupon) return 0;
+    if (grossTotal < Number(appliedCoupon.min_order_amount || 0)) return 0;
+    const value = Number(appliedCoupon.value || 0);
+    let discount =
+      appliedCoupon.discount_type === "PERCENT"
+        ? (grossTotal * value) / 100
+        : value;
+    if (appliedCoupon.max_discount_amount != null) {
+      discount = Math.min(discount, Number(appliedCoupon.max_discount_amount));
+    }
+    return Math.max(0, Math.min(discount, grossTotal));
+  })();
+  const discountAmount = Math.min(manualDiscountAmount + couponDiscountAmount, grossTotal);
   const total = Math.max(0, grossTotal - discountAmount);
   const cashGivenAmount = Number(cashGiven || 0);
   const cashBalance = Number.isFinite(cashGivenAmount) ? cashGivenAmount - total : 0;
@@ -589,11 +967,79 @@ export default function SalesTransactionPage() {
     setDiscountPercentInput(computedPercent.toFixed(2));
   };
 
+  const switchDiscountMode = (mode: "percent" | "amount") => {
+    setDiscountMode(mode);
+    if (mode === "percent") {
+      syncFromAmount(discountAmountInput, grossTotal);
+      return;
+    }
+    syncFromPercent(discountPercentInput, grossTotal);
+  };
+
+  const removeCoupon = () => {
+    setAppliedCoupon(null);
+    setCouponError("");
+  };
+
+  const applyCoupon = async () => {
+    if (!token) return;
+    const code = couponCodeInput.trim().toUpperCase();
+    if (!code) {
+      setCouponError("Enter coupon code.");
+      return;
+    }
+    if (grossTotal <= 0) {
+      setCouponError("Add items to cart before applying coupon.");
+      return;
+    }
+    try {
+      setApplyingCoupon(true);
+      setCouponError("");
+      const res = await fetch(`${BASE_URL}/api/orders/coupons/validate/`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          code,
+          order_amount: Number(grossTotal.toFixed(2)),
+          customer_phone: orderDetails?.customer_phone || orderDetails?.phone || "",
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setAppliedCoupon(null);
+        setCouponError(String(data?.detail ?? data?.error ?? "Invalid coupon."));
+        return;
+      }
+      setAppliedCoupon({
+        id: Number(data.id),
+        code: String(data.code ?? code),
+        discount_type: String(data.discount_type ?? "PERCENT") as "AMOUNT" | "PERCENT",
+        value: Number(data.value ?? 0),
+        min_order_amount: Number(data.min_order_amount ?? 0),
+        max_discount_amount: data.max_discount_amount == null ? null : Number(data.max_discount_amount),
+      });
+      setCouponCodeInput(String(data.code ?? code));
+      setCouponError("");
+    } catch (err) {
+      console.error("Apply coupon failed:", err);
+      setAppliedCoupon(null);
+      setCouponError("Could not apply coupon.");
+    } finally {
+      setApplyingCoupon(false);
+    }
+  };
+
   useEffect(() => {
     if (cart.length > 0) return;
     setDiscountPercentInput("");
     setDiscountAmountInput("");
     setDiscountMode("amount");
+    setCouponCodeInput("");
+    setAppliedCoupon(null);
+    setCouponError("");
   }, [cart.length]);
 
   useEffect(() => {
@@ -604,31 +1050,27 @@ export default function SalesTransactionPage() {
     syncFromAmount(discountAmountInput, grossTotal);
   }, [grossTotal]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const getExpandedItems = () => {
-    const expandedItems: Array<{ product: string; quantity: number }> = [];
-    cart.forEach((c) => {
-      if (c.type === "product") {
-        expandedItems.push({ product: c.id, quantity: c.qty });
-        return;
+  const getCartPayloadItems = () => {
+    return cart.map((item) => {
+      if (item.type === "combo") {
+        return {
+          combo: item.id,
+          quantity: item.qty,
+        };
       }
-      (c.comboItems ?? []).forEach((comboItem) => {
-        if (!comboItem.product) return;
-        expandedItems.push({
-          product: comboItem.product,
-          quantity: Number(comboItem.quantity || 0) * c.qty,
-        });
-      });
+      return {
+        product: item.id,
+        quantity: item.qty,
+        addons: (item.selectedAddons ?? []).map((addon) => ({
+          addon: addon.id,
+          quantity: addon.qty,
+        })),
+      };
     });
-    return expandedItems;
   };
 
   const syncCartItems = async (resolvedOrderId: string) => {
-    const expandedItems = getExpandedItems();
-    const mergedByProduct = expandedItems.reduce<Record<string, number>>((acc, item) => {
-      if (!item.product || item.quantity <= 0) return acc;
-      acc[item.product] = (acc[item.product] ?? 0) + item.quantity;
-      return acc;
-    }, {});
+    const items = getCartPayloadItems();
 
     const addRes = await fetch(`${BASE_URL}/api/orders/add-items/${resolvedOrderId}/`, {
       method: "POST",
@@ -637,16 +1079,14 @@ export default function SalesTransactionPage() {
         Authorization: `Bearer ${token}`,
       },
       body: JSON.stringify({
-        items: Object.entries(mergedByProduct).map(([product, quantity]) => ({
-          product,
-          quantity,
-        })),
-        ...(discountAmount > 0 ? { discount_amount: Number(discountAmount.toFixed(2)) } : {}),
+        items,
+        ...(manualDiscountAmount > 0 ? { discount_amount: Number(manualDiscountAmount.toFixed(2)) } : {}),
+        ...(appliedCoupon ? { coupon_code: appliedCoupon.code } : {}),
       }),
     });
     if (!addRes.ok) {
-      const err = await addRes.json().catch(() => ({}));
-      throw new Error(String(err?.detail ?? err?.error ?? "Failed to add items."));
+      const err: unknown = await addRes.json().catch(() => ({}));
+      throw new Error(getApiErrorMessage(err, "Failed to add items."));
     }
   };
 
@@ -677,12 +1117,12 @@ export default function SalesTransactionPage() {
         });
 
         if (!createRes.ok) {
-          const err = await createRes.json().catch(() => ({}));
-          throw new Error(String(err?.error ?? err?.detail ?? "Unable to create dine-in order."));
+          const err: unknown = await createRes.json().catch(() => ({}));
+          throw new Error(getApiErrorMessage(err, "Unable to create dine-in order."));
         }
 
         const created = await createRes.json();
-        const createdId = String(created?.id ?? created?.order_id ?? created?.order?.id ?? "");
+        const createdId = getCreatedOrderId(created);
         if (!createdId) throw new Error("Order created but id was not returned by API.");
 
         resolvedOrderId = createdId;
@@ -729,6 +1169,31 @@ export default function SalesTransactionPage() {
     setShowPaymentModal(true);
   };
 
+  const loadInvoicePreview = async (orderIdToLoad: string) => {
+    if (!token) return;
+    setInvoiceLoading(true);
+    try {
+      const res = await fetch(`${BASE_URL}/api/orders/invoice/${orderIdToLoad}/`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(String(data?.error ?? data?.detail ?? "Failed to load invoice."));
+      }
+      setInvoiceData(data as InvoiceData);
+    } finally {
+      setInvoiceLoading(false);
+    }
+  };
+
+  const closeInvoicePreview = () => {
+    setInvoiceData(null);
+    setRuntimeOrderId(null);
+    navigate("/staff/pos", { replace: true });
+  };
+
   const confirmTakeawayPayment = async () => {
     if (!token || !effectiveOrderId || paying) return;
     if (paymentMethod === "CARD" && !paymentReference.trim()) {
@@ -762,16 +1227,13 @@ export default function SalesTransactionPage() {
       });
       if (!payRes.ok) {
         const raw = await payRes.text().catch(() => "");
-        let err: any = {};
+        let err: Record<string, unknown> | unknown[] = {};
         try {
-          err = raw ? JSON.parse(raw) : {};
+          err = raw ? (JSON.parse(raw) as Record<string, unknown> | unknown[]) : {};
         } catch {
           err = { raw };
         }
-        const msg =
-          (Array.isArray(err) && err.length > 0 ? String(err[0]) : "") ||
-          (Array.isArray(err?.detail) && err.detail.length > 0 ? String(err.detail[0]) : "") ||
-          String(err?.detail ?? err?.error ?? err?.message ?? err?.raw ?? "Payment failed.");
+        const msg = getApiErrorMessage(err, "Payment failed.");
         throw new Error(msg);
       }
 
@@ -786,10 +1248,12 @@ export default function SalesTransactionPage() {
 
       setShowPaymentModal(false);
       setCart([]);
-      navigate("/staff/kitchen");
+      await loadInvoicePreview(effectiveOrderId);
     } catch (error) {
       console.error(error);
-      setPaymentError(error instanceof Error ? error.message : "Payment failed.");
+      const message = error instanceof Error ? error.message : "Payment failed.";
+      setPaymentError(message);
+      setPosNotice(message);
     } finally {
       setPaying(false);
     }
@@ -885,6 +1349,10 @@ export default function SalesTransactionPage() {
 
       if (key === "escape") {
         event.preventDefault();
+        if (invoiceData) {
+          closeInvoicePreview();
+          return;
+        }
         if (pendingSelection) {
           closeQtyModal();
           return;
@@ -926,7 +1394,7 @@ export default function SalesTransactionPage() {
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [filteredProducts, filteredCombos, navigate, showTakeawayModal, showPaymentModal, cart, creatingTakeaway, hasBillingContext, pendingSelection, isDineInContext]);
+  }, [filteredProducts, filteredCombos, navigate, showTakeawayModal, showPaymentModal, cart, creatingTakeaway, hasBillingContext, pendingSelection, isDineInContext]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!pendingSelection) return;
@@ -969,9 +1437,44 @@ export default function SalesTransactionPage() {
     return map;
   }, [products]);
 
+  const invoiceLineItems = useMemo(() => {
+    if (!invoiceData) return [];
+    if (Array.isArray(invoiceData.line_items) && invoiceData.line_items.length > 0) {
+      return invoiceData.line_items;
+    }
+    return Array.isArray(invoiceData.items) ? invoiceData.items : [];
+  }, [invoiceData]);
+
   return (
-    <div className="min-h-screen bg-[linear-gradient(145deg,#f6f0ff_0%,#f9f7ff_45%,#efe6ff_100%)] p-4 md:p-6">
-      <div className="mx-auto grid max-w-[1600px] grid-cols-1 gap-6 lg:grid-cols-12">
+    <div className="pos-page min-h-screen p-4 md:p-">
+      <style>{`
+        @media print {
+          .pos-page > * {
+            display: none !important;
+          }
+          .pos-page > .pos-invoice-overlay {
+            display: flex !important;
+            position: static !important;
+            inset: auto !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            background: #fff !important;
+          }
+          .pos-thermal-root {
+            width: 80mm !important;
+            max-width: 80mm !important;
+            max-height: none !important;
+            overflow: visible !important;
+            border: 0 !important;
+            box-shadow: none !important;
+            border-radius: 0 !important;
+          }
+          .pos-no-print {
+            display: none !important;
+          }
+        }
+      `}</style>
+      <div className="mx-auto grid max-w-[2000px] grid-cols-1 gap-6 lg:grid-cols-12">
         {/* LEFT */}
         <div className="space-y-6 lg:col-span-8">
           <div ref={searchDropdownRef} className="relative max-w-md">
@@ -1217,14 +1720,15 @@ export default function SalesTransactionPage() {
               {cart.map(item => {
                 const rate = Number(item.gst_percent || 0);
                 const base = item.price * item.qty;
-                const final = base + (base * rate) / 100;
+                const taxableBase = (item.basePrice ?? item.price) * item.qty;
+                const final = base + (taxableBase * rate) / 100;
 
                 return (
                   <div
                     key={item.key}
                     className="mb-2 grid grid-cols-12 items-center rounded-xl border border-purple-100 bg-purple-50/40 px-2 py-2 text-[12px]"
                   >
-                    <div className="col-span-5 flex items-center gap-2">
+                    <div className="col-span-5 flex items-center gap-2 rounded-lg text-left">
                       <img
                         src={item.image || "https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=120&q=80"}
                         className="h-9 w-9 rounded-md object-cover"
@@ -1234,6 +1738,21 @@ export default function SalesTransactionPage() {
                         <p className="text-[11px] text-purple-600/75">
                           Rs {item.price} x {item.qty}
                         </p>
+                        {item.type === "product" && (
+                          <button
+                            type="button"
+                            onClick={() => openQtyModalForCartItem(item)}
+                            className="mt-0.5 text-[12px] font-semibold text-purple-700 underline decoration-purple-400 underline-offset-2 hover:text-purple-900"
+                            title="Open addons modal"
+                          >
+                            Edit addons
+                          </button>
+                        )}
+                        {item.selectedAddons && item.selectedAddons.length > 0 && (
+                          <p className="mt-0.5 line-clamp-2 text-[10px] text-purple-700/80">
+                            {item.selectedAddons.map((addon) => `${addon.name} x${addon.qty}`).join(", ")}
+                          </p>
+                        )}
                       </div>
                     </div>
 
@@ -1285,50 +1804,90 @@ export default function SalesTransactionPage() {
                 <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-purple-700">
                   Discount
                 </p>
-                <div className="space-y-2">
-                  <div>
-                    <label className="mb-1 block text-[11px] font-medium text-purple-700">Discount Percent (%)</label>
-                    <div className="relative">
-                      <Input
-                        type="number"
-                        min={0}
-                        max={100}
-                        step="0.01"
-                        value={discountPercentInput}
-                        onChange={(e) => {
-                          const raw = e.target.value;
-                          setDiscountMode("percent");
+                <div>
+                  <label className="mb-1 block text-[11px] font-medium text-purple-700">
+                    {discountMode === "percent" ? "Discount Percent (%)" : "Discount Amount (Rs)"}
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <Input
+                      type="number"
+                      min={0}
+                      max={discountMode === "percent" ? 100 : undefined}
+                      step="0.01"
+                      value={discountMode === "percent" ? discountPercentInput : discountAmountInput}
+                      onChange={(e) => {
+                        const raw = e.target.value;
+                        if (discountMode === "percent") {
                           setDiscountPercentInput(raw);
                           syncFromPercent(raw, grossTotal);
-                        }}
-                        placeholder="Enter percent"
-                        className="h-9 rounded-lg border-purple-200 bg-white pr-7 text-xs text-purple-950 placeholder:text-purple-400 focus-visible:ring-purple-300"
-                      />
-                      <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-xs font-semibold text-purple-600">%</span>
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="mb-1 block text-[11px] font-medium text-purple-700">Discount Amount (Rs)</label>
-                    <div className="relative">
-                      <span className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-xs font-semibold text-purple-600">Rs</span>
-                      <Input
-                        type="number"
-                        min={0}
-                        step="0.01"
-                        value={discountAmountInput}
-                        onChange={(e) => {
-                          const raw = e.target.value;
-                          setDiscountMode("amount");
-                          setDiscountAmountInput(raw);
-                          syncFromAmount(raw, grossTotal);
-                        }}
-                        placeholder="Enter amount"
-                        className="h-9 rounded-lg border-purple-200 bg-white pl-8 text-xs text-purple-950 placeholder:text-purple-400 focus-visible:ring-purple-300"
-                      />
+                          return;
+                        }
+                        setDiscountAmountInput(raw);
+                        syncFromAmount(raw, grossTotal);
+                      }}
+                      placeholder={discountMode === "percent" ? "Enter percent" : "Enter amount"}
+                      className={`h-9 rounded-lg border-purple-200 bg-white text-xs text-purple-950 placeholder:text-purple-400 focus-visible:ring-purple-300 ${
+                        discountMode === "amount" ? "pl-8" : "pr-7"
+                      }`}
+                    />
+                    <div className="inline-flex h-9 w-full rounded-lg border border-purple-200 bg-white text-[11px] font-semibold">
+                      <button
+                        type="button"
+                        onClick={() => switchDiscountMode("amount")}
+                        className={`w-1/2 rounded-md px-2 py-1 ${discountMode === "amount" ? "bg-purple-600 text-white" : "text-purple-700"}`}
+                      >
+                        Amt
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => switchDiscountMode("percent")}
+                        className={`w-1/2 rounded-md px-2 py-1 ${discountMode === "percent" ? "bg-purple-600 text-white" : "text-purple-700"}`}
+                      >
+                        %
+                      </button>
                     </div>
                   </div>
                 </div>
+              </div>
+              <div className="rounded-xl border border-purple-100 bg-purple-50/40 p-3">
+                <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-purple-700">
+                  Coupon
+                </p>
+                <div className="space-y-2">
+                  <Input
+                    value={couponCodeInput}
+                    onChange={(e) => setCouponCodeInput(e.target.value.toUpperCase())}
+                    placeholder="Enter coupon code"
+                    className="h-9 rounded-lg border-purple-200 bg-white text-xs text-purple-950 placeholder:text-purple-400 focus-visible:ring-purple-300"
+                  />
+                  <div className="grid grid-cols-2 gap-2">
+                    <Button
+                      type="button"
+                      onClick={() => void applyCoupon()}
+                      disabled={applyingCoupon}
+                      className="h-9 rounded-lg bg-purple-600 px-3 text-xs text-white hover:bg-purple-700"
+                    >
+                      {applyingCoupon ? "Applying..." : "Apply"}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={removeCoupon}
+                      disabled={!appliedCoupon}
+                      className="h-9 rounded-lg border-purple-200 px-3 text-xs text-purple-700 hover:bg-purple-50"
+                    >
+                      Remove
+                    </Button>
+                  </div>
+                </div>
+                {appliedCoupon && (
+                  <p className="mt-2 text-[11px] font-medium text-emerald-700">
+                    Applied: {appliedCoupon.code} (- Rs {couponDiscountAmount.toFixed(2)})
+                  </p>
+                )}
+                {couponError && (
+                  <p className="mt-2 text-[11px] font-medium text-rose-700">{couponError}</p>
+                )}
               </div>
               <div className="flex justify-between text-sm text-purple-800">
                 <span>Discount</span>
@@ -1415,8 +1974,14 @@ export default function SalesTransactionPage() {
 
       {pendingSelection && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4 backdrop-blur-sm">
-          <div className="w-full max-w-sm rounded-2xl border border-purple-200 bg-white p-6 shadow-2xl">
-            <h2 className="mb-1 text-xl font-semibold text-purple-950">Add Quantity</h2>
+          <div className="w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-3xl border border-purple-200 bg-white p-6 shadow-2xl">
+            <h2 className="mb-1 text-xl font-semibold text-purple-950">
+              {pendingSelection.type === "product"
+                ? isEditingPendingSelection
+                  ? "Edit Item"
+                  : "Customize Item"
+                : "Add Quantity"}
+            </h2>
             <p className="mb-4 text-sm text-purple-700">
               {pendingSelection.type === "product"
                 ? pendingSelection.product?.name
@@ -1434,7 +1999,7 @@ export default function SalesTransactionPage() {
                 type="number"
                 min={1}
                 step={1}
-                placeholder="Enter quantity"
+                placeholder="Enter product quantity"
                 value={pendingQty}
                 onChange={(e) => {
                   setPendingQty(e.target.value);
@@ -1442,6 +2007,60 @@ export default function SalesTransactionPage() {
                 }}
                 className="mb-3 h-11 rounded-xl border-purple-200 bg-white text-purple-950 placeholder:text-purple-400 focus-visible:ring-purple-300"
               />
+
+              {pendingSelection.type === "product" && (
+                <div className="mb-4 space-y-3 rounded-2xl border border-purple-100 bg-purple-50/40 p-4">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-purple-700">
+                      Addons
+                    </p>
+                    <p className="text-xs font-semibold text-purple-700">
+                      + Rs {pendingAddonUnitTotal.toFixed(2)} / item
+                    </p>
+                  </div>
+
+                  <div className="relative">
+                    
+                    <Input
+                      value={pendingAddonSearch}
+                      onChange={(e) => setPendingAddonSearch(e.target.value)}
+                      placeholder="Search addons..."
+                      className="h-10 rounded-xl border-purple-200 bg-white pl-9 text-sm text-purple-950 placeholder:text-purple-400 focus-visible:ring-purple-300"
+                    />
+                  </div>
+
+                  {renderAddonRows(previewPendingAddons)}
+                  {filteredPendingAddons.length > 4 && (
+                    <div className="flex justify-end">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => setShowAllAddonsModal(true)}
+                        className="h-9 border-purple-200 text-xs text-purple-700 hover:bg-purple-50"
+                      >
+                        Show More ({filteredPendingAddons.length - 4} more)
+                      </Button>
+                    </div>
+                  )}
+
+                  <div className="rounded-xl border border-purple-200 bg-white px-3 py-2 text-xs text-purple-800">
+                    <div className="flex items-center justify-between">
+                      <span>Base Price</span>
+                      <span>Rs {Number(pendingSelection.product?.price || 0).toFixed(2)}</span>
+                    </div>
+                    <div className="mt-1 flex items-center justify-between">
+                      <span>Addons / item</span>
+                      <span>Rs {pendingAddonUnitTotal.toFixed(2)}</span>
+                    </div>
+                    <div className="mt-1 flex items-center justify-between border-t border-purple-100 pt-1.5 font-semibold">
+                      <span>Item Total x Qty</span>
+                      <span>
+                        Rs {(pendingProductUnitPrice * Math.max(1, Number(pendingQty) || 1)).toFixed(2)}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              )}
               {pendingQtyError && (
                 <p className="mb-4 text-sm font-medium text-violet-700">{pendingQtyError}</p>
               )}
@@ -1459,10 +2078,145 @@ export default function SalesTransactionPage() {
                   type="submit"
                   className="bg-[linear-gradient(135deg,#7c3aed_0%,#5b21b6_100%)] text-white hover:opacity-95"
                 >
-                  Add
+                  {isEditingPendingSelection ? "Update Item" : "Add"}
                 </Button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {pendingSelection?.type === "product" && showAllAddonsModal && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 px-4 backdrop-blur-sm">
+          <div className="w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-3xl border border-purple-200 bg-white p-5 shadow-2xl">
+            <div className="mb-3 flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-semibold text-purple-950">All Addons</h3>
+                <p className="text-xs text-purple-700">Search works across all addons.</p>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setShowAllAddonsModal(false);
+                  closePendingAddonQtyEditor();
+                }}
+                className="border-purple-200 text-purple-700 hover:bg-purple-50"
+              >
+                Close
+              </Button>
+            </div>
+
+            <div className="relative mb-3">
+              
+              <Input
+                value={pendingAddonSearch}
+                onChange={(e) => setPendingAddonSearch(e.target.value)}
+                placeholder="Search addons..."
+                className="h-10 rounded-xl border-purple-200 bg-white pl-9 text-sm text-purple-950 placeholder:text-purple-400 focus-visible:ring-purple-300"
+              />
+            </div>
+
+            {renderAddonRows(filteredPendingAddons)}
+          </div>
+        </div>
+      )}
+
+      {(invoiceLoading || invoiceData) && (
+        <div className="pos-invoice-overlay fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
+          <div className="pos-thermal-root w-full max-w-xl max-h-[90vh] overflow-y-auto rounded-xl border border-purple-200 bg-white shadow-2xl">
+            <div className="pos-no-print flex items-center justify-between border-b border-purple-100 px-4 py-3">
+              <p className="text-sm font-semibold text-purple-900">Bill Preview</p>
+              <button
+                onClick={closeInvoicePreview}
+                className="rounded-md border border-purple-200 px-3 py-1.5 text-xs text-purple-700 hover:bg-purple-50"
+              >
+                Close
+              </button>
+            </div>
+
+            <div className="p-4 text-slate-900">
+              {invoiceLoading && !invoiceData ? (
+                <p className="text-sm text-purple-700">Loading invoice...</p>
+              ) : (
+                <div className="mx-auto w-full max-w-md rounded-md border border-dashed border-slate-300 p-3 font-mono text-[10px] leading-tight">
+                  <div className="border-b border-dashed border-slate-300 pb-3 text-center">
+                    <img src="/logo.png" alt="Logo" className="mx-auto mb-2 h-10 w-auto object-contain" />
+                    <p className="text-sm font-bold tracking-wide">Kensei Food & Beverages Private Limited</p>
+                    <p className="mt-1 font-semibold">DIP & DASH PERUNGUDI CHENNAI</p>
+                    <div className="my-1 border-t border-dashed border-slate-400" />
+                    <p className="font-bold tracking-wide">TAX INVOICE</p>
+                    <div className="mt-1 grid grid-cols-2 gap-x-3 gap-y-1 text-left">
+                      <p><span className="font-semibold">Bill No:</span> {invoiceData?.bill_number || "-"}</p>
+                      <p><span className="font-semibold">Bill Dt:</span> {invoiceData?.date ? new Date(invoiceData.date).toLocaleString() : "-"}</p>
+                      <p><span className="font-semibold">Customer:</span> {invoiceData?.customer_name || "-"}</p>
+                      <p><span className="font-semibold">Cashier:</span> {invoiceData?.staff || "-"}</p>
+                    </div>
+                  </div>
+
+                  <div className="border-b border-dashed border-slate-300 py-3">
+                    <p className="mb-2 font-semibold">Items List</p>
+                    <div className="mb-2 grid grid-cols-12 gap-2 font-semibold">
+                      <p className="col-span-5">Item</p>
+                      <p className="col-span-2 text-right">Qty</p>
+                      <p className="col-span-2 text-right">Price</p>
+                      <p className="col-span-3 text-right">Total</p>
+                    </div>
+                    <div className="space-y-1.5">
+                      {invoiceLineItems.length > 0 ? (
+                        invoiceLineItems.map((li, idx) => (
+                          <div key={`${li.name}-${idx}`} className="grid grid-cols-12 gap-2">
+                            <p className="col-span-5 truncate">{li.name}</p>
+                            <p className="col-span-2 text-right">{li.quantity}</p>
+                            <p className="col-span-2 text-right">{Number(li.base_price || 0).toFixed(0)}</p>
+                            <p className="col-span-3 text-right">{Number(li.line_total || 0).toFixed(0)}</p>
+                          </div>
+                        ))
+                      ) : (
+                        <p className="text-[11px] text-slate-500">No items available in invoice payload.</p>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5 pt-3">
+                    <div className="flex justify-between">
+                      <span>Subtotal</span>
+                      <span>Rs.{Number(invoiceData?.subtotal || 0).toLocaleString()}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Total GST</span>
+                      <span>Rs.{Number(invoiceData?.total_gst || 0).toLocaleString()}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Discount</span>
+                      <span>Rs.{Number(invoiceData?.discount || 0).toLocaleString()}</span>
+                    </div>
+                    <div className="flex justify-between border-t border-dashed border-slate-300 pt-2 text-sm font-bold">
+                      <span>Final Amount</span>
+                      <span>Rs.{Number(invoiceData?.final_amount || 0).toLocaleString()}</span>
+                    </div>
+                  </div>
+                  <p className="mt-4 text-center text-[11px] text-slate-500">Thank you. Visit again.</p>
+                </div>
+              )}
+
+              {invoiceData && (
+                <div className="pos-no-print mt-4 flex items-center justify-center gap-3">
+                  <button
+                    onClick={() => window.print()}
+                    className="rounded-md bg-slate-900 px-4 py-2 text-xs font-semibold text-white hover:bg-black"
+                  >
+                    Thermal Print
+                  </button>
+                  <button
+                    onClick={closeInvoicePreview}
+                    className="rounded-md border border-purple-200 px-4 py-2 text-xs font-semibold text-purple-700 hover:bg-purple-50"
+                  >
+                    Close
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}
