@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, useMemo } from 'react';
+﻿import { useCallback, useEffect, useState, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { Plus } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -13,7 +13,7 @@ import { type TableData, type TableStatus } from '@/data/tables';
 
 /* ================= CONFIG ================= */
 
-const BASE_URL = 'http://192.168.1.18:8000';
+const BASE_URL = 'https://billingdemo-irsxd.ondigitalocean.app';
 
 const TABLES_LIST_ENDPOINT = '/api/tables/list/';
 const TABLES_CREATE_ENDPOINT = '/api/tables/create/';
@@ -598,5 +598,6 @@ const Index = () => {
 };
 
 export default Index;
+
 
 

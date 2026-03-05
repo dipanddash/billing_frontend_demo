@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+﻿import { useEffect, useMemo, useState } from "react";
 import { ShieldCheck, UserRound, Mail, BadgeCheck } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import {
@@ -10,7 +10,7 @@ import {
   type StaffUserOption,
 } from "@/lib/reportsConfig";
 
-const API_BASE = "http://192.168.1.18:8000";
+const API_BASE = "https://billingdemo-irsxd.ondigitalocean.app";
 
 type AccessConfig = {
   roleLabel: string;
@@ -420,4 +420,5 @@ const AdminProfile = () => {
 };
 
 export default AdminProfile;
+
 

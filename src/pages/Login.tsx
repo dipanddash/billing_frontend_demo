@@ -1,4 +1,4 @@
-import { useState } from "react";
+﻿import { useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNavigate } from "react-router-dom";
 import { ArrowRight, Eye, EyeOff, Globe, ShieldCheck, Zap } from "lucide-react";
@@ -15,6 +15,16 @@ const Login = () => {
   const [isSigningIn, setIsSigningIn] = useState(false);
 
   const navigate = useNavigate();
+  const extractErrorMessage = (payload: unknown, fallback: string) => {
+    const obj = payload as Record<string, unknown>;
+    const detail = obj?.detail;
+    if (typeof detail === "string" && detail.trim()) return detail;
+    if (Array.isArray(detail) && detail.length > 0) return String(detail[0]);
+    if (typeof obj?.error === "string" && obj.error.trim()) return obj.error;
+    if (typeof obj?.non_field_errors === "string" && obj.non_field_errors.trim()) return obj.non_field_errors;
+    if (Array.isArray(obj?.non_field_errors) && obj.non_field_errors.length > 0) return String(obj.non_field_errors[0]);
+    return fallback;
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -23,7 +33,7 @@ const Login = () => {
     setIsSigningIn(true);
 
     try {
-      const loginResponse = await fetch("http://192.168.1.18:8000/api/accounts/login/", {
+      const loginResponse = await fetch("https://billingdemo-irsxd.ondigitalocean.app/api/accounts/login/", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ username, password }),
@@ -32,10 +42,10 @@ const Login = () => {
       const loginData = await loginResponse.json();
 
       if (!loginResponse.ok) {
-        throw new Error(loginData.detail || "Invalid credentials");
+        throw new Error(extractErrorMessage(loginData, "Invalid credentials"));
       }
 
-      const tokenResponse = await fetch("http://192.168.1.18:8000/api/accounts/token/", {
+      const tokenResponse = await fetch("https://billingdemo-irsxd.ondigitalocean.app/api/accounts/token/", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ username, password }),
@@ -44,7 +54,11 @@ const Login = () => {
       const tokenData = await tokenResponse.json();
 
       if (!tokenResponse.ok) {
-        throw new Error(tokenData?.detail || tokenData?.error || "Token generation failed");
+        const message = extractErrorMessage(tokenData, "Token generation failed");
+        if (message.toLowerCase().includes("no active account")) {
+          throw new Error("Can't login for the day. Ask admin to activate your account.");
+        }
+        throw new Error(message);
       }
 
       const role = loginData.role?.toUpperCase().trim();
@@ -204,3 +218,4 @@ const Login = () => {
 };
 
 export default Login;
+

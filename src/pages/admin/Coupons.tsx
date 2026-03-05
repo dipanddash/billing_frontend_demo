@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+﻿import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { motion } from "framer-motion";
 import { Gift, History, TicketPercent } from "lucide-react";
 
-const API_BASE = "http://192.168.1.18:8000";
+const API_BASE = "https://billingdemo-irsxd.ondigitalocean.app";
 
 interface Coupon {
   id: number;
@@ -731,3 +731,4 @@ const MiniStat = ({ label, value }: { label: string; value: string }) => (
 );
 
 export default Coupons;
+

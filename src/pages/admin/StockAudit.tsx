@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+﻿import { useEffect, useMemo, useState } from "react";
 
-const API_BASE = "http://192.168.1.18:8000";
+const API_BASE = "https://billingdemo-irsxd.ondigitalocean.app";
 
 type AuditRow = {
   ingredient_id: string;
@@ -130,3 +130,4 @@ export default function StockAudit() {
     </div>
   );
 }
+

@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+﻿import { useEffect, useMemo, useRef, useState } from "react";
 import { AlertCircle, CalendarCheck2, Check, ChevronDown, Clock3, ShieldCheck, UserCog, Users2, X } from "lucide-react";
 
-const API_BASE = "http://192.168.1.18:8000";
+const API_BASE = "https://billingdemo-irsxd.ondigitalocean.app";
 
 type StaffStatus = "ACTIVE" | "INACTIVE" | "ON_LEAVE";
 
@@ -38,51 +38,6 @@ interface AttendanceLog {
   last_logout?: string | null;
 }
 
-const fallbackStaff: StaffMember[] = [
-  {
-    id: "1",
-    username: "alex",
-    name: "Alex Rivera",
-    email: "alex@cafeflow.com",
-    phone: "9876543210",
-    role: "STAFF",
-    status: "ACTIVE",
-    is_active: true,
-    shift: "Morning",
-    joined_at: "2025-11-10T09:00:00Z",
-    last_login: "2026-02-24T08:10:00Z",
-    last_logout: "2026-02-24T17:45:00Z",
-  },
-  {
-    id: "2",
-    username: "priya",
-    name: "Priya Shah",
-    email: "priya@cafeflow.com",
-    phone: "9765432109",
-    role: "ACCOUNTANT",
-    status: "ACTIVE",
-    is_active: true,
-    shift: "General",
-    joined_at: "2025-08-22T09:00:00Z",
-    last_login: "2026-02-24T09:20:00Z",
-    last_logout: "2026-02-24T18:10:00Z",
-  },
-  {
-    id: "3",
-    username: "james",
-    name: "James Cooper",
-    email: "james@cafeflow.com",
-    phone: "9654321098",
-    role: "MANAGER",
-    status: "ON_LEAVE",
-    is_active: true,
-    shift: "Evening",
-    joined_at: "2024-06-01T09:00:00Z",
-    last_login: "2026-02-20T19:40:00Z",
-    last_logout: "2026-02-21T04:30:00Z",
-  },
-];
-
 const formatDate = (value?: string) => {
   if (!value) return "-";
   const d = new Date(value);
@@ -104,6 +59,16 @@ const statusClass: Record<StaffStatus, string> = {
 };
 
 const normalizeKey = (value: string) => value.trim().toLowerCase().replace(/[^a-z0-9]+/g, "");
+const toBool = (value: unknown, fallback = false) => {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "number") return value !== 0;
+  if (typeof value === "string") {
+    const v = value.trim().toLowerCase();
+    if (["true", "1", "yes", "active"].includes(v)) return true;
+    if (["false", "0", "no", "inactive"].includes(v)) return false;
+  }
+  return fallback;
+};
 
 const composeDateTime = (date?: string, time?: string | null) => {
   if (!time) return undefined;
@@ -155,7 +120,7 @@ const StaffManagement = () => {
   const mapStaff = (row: Record<string, unknown>): StaffMember => {
     const user = (typeof row.user === "object" && row.user !== null ? (row.user as Record<string, unknown>) : {});
     const rawStatus = String(row.status ?? "").toUpperCase();
-    const activeFlag = Boolean(row.is_active ?? (rawStatus === "ACTIVE"));
+    const activeFlag = toBool(row.is_active, rawStatus === "ACTIVE");
     let status: StaffStatus = "ACTIVE";
     if (rawStatus === "ON_LEAVE") status = "ON_LEAVE";
     else if (rawStatus === "INACTIVE" || !activeFlag) status = "INACTIVE";
@@ -270,7 +235,7 @@ const StaffManagement = () => {
     }
   };
 
-  const loadStaff = async () => {
+  const loadStaff = async (): Promise<StaffMember[]> => {
     try {
       setFetchError(null);
       const res = await fetch(`${API_BASE}/api/accounts/staff/`, { headers: getAuthHeaders() });
@@ -284,12 +249,16 @@ const StaffManagement = () => {
             ? (data as { data: unknown[] }).data
             : [];
       const mapped = list.map((row: Record<string, unknown>) => mapStaff(row));
-      setStaff(mapped.length ? mapped : fallbackStaff);
-      if (!mapped.length) setFetchError("Staff API returned an empty or unsupported response format. Showing fallback data.");
+      setStaff(mapped);
+      if (!mapped.length) {
+        setFetchError("No staff records found.");
+      }
+      return mapped;
     } catch (err) {
       console.error(err);
-      setFetchError("Unable to fetch staff records from API. Showing fallback data.");
-      setStaff(fallbackStaff);
+      setFetchError("Unable to fetch staff records from API.");
+      setStaff([]);
+      return [];
     } finally {
       setLoading(false);
     }
@@ -300,6 +269,14 @@ const StaffManagement = () => {
   }, []);
 
   useEffect(() => {
+    const timer = window.setInterval(() => {
+      void loadStaff();
+      void loadAttendanceLogs();
+    }, 15000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
     const onDocClick = (event: MouseEvent) => {
       if (!roleMenuRef.current) return;
       if (!roleMenuRef.current.contains(event.target as Node)) setRoleMenuOpen(false);
@@ -307,6 +284,12 @@ const StaffManagement = () => {
     document.addEventListener("mousedown", onDocClick);
     return () => document.removeEventListener("mousedown", onDocClick);
   }, []);
+
+  useEffect(() => {
+    if (!selected) return;
+    const latest = staff.find((row) => row.id === selected.id);
+    if (latest) setSelected(latest);
+  }, [staff, selected?.id]);
 
   const createStaff = async () => {
     setSaving(true);
@@ -414,11 +397,15 @@ const StaffManagement = () => {
     setSaving(true);
     try {
       const nextActive = !member.is_active;
+      let responsePayload: Record<string, unknown> = {};
       let res = await fetch(`${API_BASE}/api/accounts/staff/${member.id}/status/`, {
         method: "PATCH",
         headers: getAuthHeaders(true),
         body: JSON.stringify({ is_active: nextActive }),
       });
+      if (res.ok) {
+        responsePayload = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+      }
       if (!res.ok) {
         res = await fetch(`${API_BASE}/api/accounts/staff/${member.id}/`, {
           method: "PATCH",
@@ -430,6 +417,12 @@ const StaffManagement = () => {
       await loadStaff();
       await loadAttendanceLogs();
       setSelected((prev) => (prev ? { ...prev, is_active: nextActive, status: nextActive ? "ACTIVE" : "INACTIVE" } : null));
+      if (nextActive) {
+        const resetRows = Number(responsePayload.manual_closing_reset_rows ?? 0);
+        if (resetRows > 0) {
+          alert(`Staff reactivated. ${resetRows} manual closing row(s) for today were reset to 0 for correction.`);
+        }
+      }
     } catch (err) {
       console.error(err);
       alert("Failed to update staff status.");
@@ -512,8 +505,10 @@ const StaffManagement = () => {
   };
 
   const handleOpenStaffDetails = async (member: StaffMember) => {
+    const latest = await loadStaff();
     await loadAttendanceLogs();
-    setSelected(member);
+    const refreshed = latest.find((s) => s.id === member.id) ?? member;
+    setSelected(refreshed);
   };
 
   const stats = useMemo(() => {
@@ -822,7 +817,11 @@ const StaffManagement = () => {
 
   {/* ADVANCED GRID (Not basic table anymore) */}
   <div className="grid grid-cols-1 gap-5 lg:grid-cols-2 xl:grid-cols-3">
-    {filtered.map((member) => (
+    {filtered.length === 0 ? (
+      <div className="col-span-full rounded-2xl border border-slate-200 bg-white px-5 py-8 text-center text-sm text-slate-500">
+        No staff records to show.
+      </div>
+    ) : filtered.map((member) => (
       <div
         key={member.id}
         className="group relative rounded-2xl border border-violet-200 bg-white/90 p-6 shadow-md transition hover:-translate-y-1 hover:shadow-[0_25px_50px_rgba(109,40,217,0.2)]"
@@ -1096,3 +1095,4 @@ const StaffManagement = () => {
 };
 
 export default StaffManagement;
+

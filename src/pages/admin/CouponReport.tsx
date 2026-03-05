@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+﻿import { useEffect, useMemo, useState } from "react";
 import { History, TicketPercent } from "lucide-react";
 
-const API_BASE = "http://192.168.1.18:8000";
+const API_BASE = "https://billingdemo-irsxd.ondigitalocean.app";
 
 interface CouponUsage {
   id: number;
@@ -197,3 +197,4 @@ const CouponReport = () => {
 };
 
 export default CouponReport;
+

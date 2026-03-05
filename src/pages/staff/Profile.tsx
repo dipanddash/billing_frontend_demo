@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+﻿import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
@@ -19,7 +19,7 @@ import {
   UtensilsCrossed,
 } from "lucide-react";
 
-const BASE_URL = "http://192.168.1.18:8000";
+const BASE_URL = "https://billingdemo-irsxd.ondigitalocean.app";
 
 const API_LINKS = {
   me: `${BASE_URL}/api/accounts/me/`,
@@ -464,5 +464,6 @@ const StaffProfile = () => {
 };
 
 export default StaffProfile;
+
 
 

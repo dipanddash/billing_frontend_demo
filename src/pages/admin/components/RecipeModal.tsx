@@ -1,6 +1,6 @@
-import { useState } from 'react'
+﻿import { useState } from 'react'
 
-const API_BASE = 'http://192.168.1.18:8000/api/products'
+const API_BASE = 'https://billingdemo-irsxd.ondigitalocean.app/api/products'
 
 interface Recipe {
   id: string
@@ -27,7 +27,7 @@ const RecipeModal = ({
   const [newIngredient, setNewIngredient] = useState('')
   const [newQuantity, setNewQuantity] = useState('')
 
-  // 🔥 UPDATE QUANTITY
+  // ðŸ”¥ UPDATE QUANTITY
   const handleUpdate = async (id: string, quantity: string) => {
     await fetch(`${API_BASE}/recipes/${id}/`, {
       method: 'PATCH',
@@ -41,7 +41,7 @@ const RecipeModal = ({
     reloadRecipes(product.id)
   }
 
-  // 🔥 DELETE RECIPE ITEM
+  // ðŸ”¥ DELETE RECIPE ITEM
   const handleDelete = async (id: string) => {
     await fetch(`${API_BASE}/recipes/${id}/`, {
       method: 'DELETE',
@@ -53,7 +53,7 @@ const RecipeModal = ({
     reloadRecipes(product.id)
   }
 
-  // 🔥 ADD NEW RECIPE
+  // ðŸ”¥ ADD NEW RECIPE
   const handleAdd = async () => {
     if (!newIngredient || !newQuantity) return
 
@@ -156,4 +156,5 @@ const RecipeModal = ({
 }
 
 export default RecipeModal
+
 

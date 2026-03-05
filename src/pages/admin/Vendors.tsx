@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+﻿import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { motion } from "framer-motion";
 import {
   BadgeCheck,
@@ -14,7 +14,7 @@ import {
   Pencil,
 } from "lucide-react";
 
-const API_BASE = "http://192.168.1.18:8000";
+const API_BASE = "https://billingdemo-irsxd.ondigitalocean.app";
 
 interface Vendor {
   id: string;
@@ -625,5 +625,6 @@ function SummaryPill({ label, value, icon }: { label: string; value: string; ico
 }
 
 export default Vendors;
+
 
 

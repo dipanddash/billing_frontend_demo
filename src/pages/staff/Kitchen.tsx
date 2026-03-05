@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+﻿import { useEffect, useState } from "react";
 import {
   Clock,
   Flame,
@@ -9,7 +9,7 @@ import {
 
 /* ================= CONFIG ================= */
 
-const BASE_URL = "http://192.168.1.18:8000";
+const BASE_URL = "https://billingdemo-irsxd.ondigitalocean.app";
 
 /* ================= TYPES ================= */
 
@@ -106,7 +106,7 @@ const Kitchen = () => {
             ? (o.table_name as string) || "Table"
             : "Takeaway",
 
-        /* 🔥 FIX CUSTOMER NULL ISSUE */
+        /* ðŸ”¥ FIX CUSTOMER NULL ISSUE */
         customer:
           (o.customer_name as string) && (o.customer_name as string).trim() !== ""
             ? (o.customer_name as string)
@@ -116,7 +116,7 @@ const Kitchen = () => {
             ? ((o.user as { name?: string }).name as string)
             : "Guest",
 
-        /* 🔥 PREPARE ITEMS WITH IMAGE */
+        /* ðŸ”¥ PREPARE ITEMS WITH IMAGE */
         items: Array.isArray(o.items)
           ? (o.items as Array<Record<string, unknown>>).map((i) => ({
               name: i.product_name as string,
@@ -300,7 +300,7 @@ const OrderCard = ({
         </p>
 
         <p className="font-semibold text-slate-900 text-sm">
-          {order.table} — {order.customer}
+          {order.table} â€” {order.customer}
         </p>
 
         <ul className="space-y-1 text-xs text-slate-600">
@@ -348,5 +348,6 @@ const OrderCard = ({
 };
 
 export default Kitchen;
+
 
 

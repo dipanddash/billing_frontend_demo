@@ -1,14 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+﻿import { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import { TrendingUp, ShoppingBag, Users, DollarSign, type LucideIcon } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, BarChart, Bar } from "recharts";
 import dashboardBanner from "@/assets/dashboard-banner.jpg";
-import dishCappuccino from "@/assets/dish-cappuccino.jpg";
-import dishLatte from "@/assets/dish-latte.jpg";
-import dishCroissant from "@/assets/dish-croissant.jpg";
-import dishChocolateCake from "@/assets/dish-chocolate-cake.jpg";
 
-const API_BASE = "http://192.168.1.18:8000";
+const API_BASE = "https://billingdemo-irsxd.ondigitalocean.app";
 type Period = "weekly" | "monthly";
 type JsonRecord = Record<string, unknown>;
 
@@ -59,8 +55,6 @@ const paymentColors = [
   "hsl(160, 70%, 45%)",
   "hsl(30, 90%, 55%)",
 ];
-
-const dishFallbacks = [dishCappuccino, dishLatte, dishCroissant, dishChocolateCake];
 
 const asRecord = (value: unknown): JsonRecord =>
   value && typeof value === "object" && !Array.isArray(value) ? (value as JsonRecord) : {};
@@ -320,7 +314,7 @@ const AdminDashboard = () => {
           const topDishMapped = list.slice(0, 5).map((x, i) => ({
             name: String(x.product_name ?? x.name ?? "Product"),
             sold: toNum(x.quantity_sold ?? x.sold ?? x.count ?? x.total_quantity ?? x.total_sold ?? x.orders_count),
-            image: String(x.image_url ?? x.image ?? x.photo ?? x.thumbnail ?? dishFallbacks[i % dishFallbacks.length]),
+            image: String(x.image_url ?? x.image ?? x.photo ?? x.thumbnail ?? ""),
           }));
           if (topDishMapped.length > 0) setTopDishes(topDishMapped);
 
@@ -513,7 +507,11 @@ const AdminDashboard = () => {
           <div className="space-y-3">
             {topDishes.map((dish, i) => (
               <div key={i} className="flex items-center gap-3">
-                <img src={dish.image} alt={dish.name} className="w-10 h-10 rounded-xl object-cover" />
+                {dish.image ? (
+                  <img src={dish.image} alt={dish.name} className="w-10 h-10 rounded-xl object-cover" />
+                ) : (
+                  <div className="w-10 h-10 rounded-xl bg-muted" />
+                )}
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-foreground truncate">{dish.name}</p>
                   <p className="text-xs text-muted-foreground">{dish.sold} sold</p>
@@ -593,5 +591,6 @@ const AdminDashboard = () => {
 };
 
 export default AdminDashboard;
+
 
 

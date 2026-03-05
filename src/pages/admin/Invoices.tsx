@@ -1,4 +1,4 @@
-import StatusBadge from '@/components/StatusBadge';
+﻿import StatusBadge from '@/components/StatusBadge';
 import { Download, ChevronLeft, ChevronRight, AlertTriangle } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { motion } from "framer-motion";
@@ -14,7 +14,7 @@ import {
 } from "recharts";
 import { AreaChart, Area } from "recharts";
 
-const API_BASE = "http://192.168.1.18:8000";
+const API_BASE = "https://billingdemo-irsxd.ondigitalocean.app";
 
 type InvoiceStatus = 'paid' | 'pending' | 'overdue' | 'cancelled';
 
@@ -36,6 +36,13 @@ interface InvoiceLineItem {
   gst_percent: number;
   gst_amount: number;
   line_total: number;
+  addons?: Array<{
+    name: string;
+    quantity_per_item?: number;
+    quantity_total?: number;
+    unit_price?: number | string;
+    line_total?: number | string;
+  }>;
 }
 
 interface InvoiceDetail {
@@ -48,6 +55,19 @@ interface InvoiceDetail {
   total_gst: number;
   grand_total: number;
   discount: number;
+  manual_discount?: number;
+  coupon_discount?: number;
+  coupon_details?: {
+    code?: string;
+    discount_type?: string;
+    value?: number | string;
+    discount_amount?: number | string;
+  } | null;
+  discount_breakdown?: {
+    manual_discount?: number | string;
+    coupon_discount?: number | string;
+    total_discount?: number | string;
+  };
   final_amount: number;
   payment_method: string;
   payment_status: string;
@@ -287,6 +307,20 @@ const Invoices = () => {
           gst_percent: Number(row.gst_percent ?? 0),
           gst_amount: Number(row.gst_amount ?? 0),
           line_total: Number(row.line_total ?? 0),
+          addons: Array.isArray(row.addons)
+            ? row.addons.map((addonRow) => {
+                const addon = addonRow && typeof addonRow === "object"
+                  ? (addonRow as Record<string, unknown>)
+                  : {};
+                return {
+                  name: String(addon.name ?? "Addon"),
+                  quantity_per_item: Number(addon.quantity_per_item ?? 0),
+                  quantity_total: Number(addon.quantity_total ?? 0),
+                  unit_price: Number(addon.unit_price ?? 0),
+                  line_total: Number(addon.line_total ?? 0),
+                };
+              })
+            : [],
         };
       });
 
@@ -300,6 +334,16 @@ const Invoices = () => {
         total_gst: Number(record.total_gst ?? 0),
         grand_total: Number(record.grand_total ?? 0),
         discount: Number(record.discount ?? 0),
+        manual_discount: Number(record.manual_discount ?? (record.discount_breakdown as Record<string, unknown> | undefined)?.manual_discount ?? 0),
+        coupon_discount: Number(record.coupon_discount ?? (record.discount_breakdown as Record<string, unknown> | undefined)?.coupon_discount ?? 0),
+        coupon_details:
+          record.coupon_details && typeof record.coupon_details === "object"
+            ? (record.coupon_details as InvoiceDetail["coupon_details"])
+            : null,
+        discount_breakdown:
+          record.discount_breakdown && typeof record.discount_breakdown === "object"
+            ? (record.discount_breakdown as InvoiceDetail["discount_breakdown"])
+            : undefined,
         final_amount: Number(record.final_amount ?? 0),
         payment_method: String(record.payment_method ?? "-"),
         payment_status: String(record.payment_status ?? "-"),
@@ -507,13 +551,23 @@ const Invoices = () => {
     autoTable(doc, {
       startY: y,
       head: [["Item", "Qty", "Price", "GST %", "Total"]],
-      body: selectedInvoice.line_items.map((li) => [
-        li.name,
-        String(li.quantity),
-        Number(li.base_price || 0).toFixed(2),
-        Number(li.gst_percent || 0).toFixed(2),
-        Number(li.line_total || 0).toFixed(2),
-      ]),
+      body: selectedInvoice.line_items.flatMap((li) => {
+        const baseRow = [[
+          li.name,
+          String(li.quantity),
+          Number(li.base_price || 0).toFixed(2),
+          Number(li.gst_percent || 0).toFixed(2),
+          Number(li.line_total || 0).toFixed(2),
+        ]];
+        const addonRows = (li.addons || []).map((addon) => [
+          `  + ${addon.name} x${Number(addon.quantity_per_item ?? addon.quantity_total ?? 0)} @ ${Number(addon.unit_price || 0).toFixed(2)}`,
+          "",
+          "",
+          "",
+          Number(addon.line_total || 0).toFixed(2),
+        ]);
+        return [...baseRow, ...addonRows];
+      }),
       styles: { fontSize: 9, cellPadding: 2.2 },
       headStyles: { fillColor: [33, 33, 33] },
       columnStyles: {
@@ -529,12 +583,26 @@ const Invoices = () => {
     const tableEndY =
       (doc as jsPDF & { lastAutoTable?: { finalY?: number } }).lastAutoTable?.finalY ?? y;
     let summaryY = tableEndY + 8;
+    const manualDiscount = Number(
+      selectedInvoice.manual_discount ??
+        selectedInvoice.discount_breakdown?.manual_discount ??
+        0
+    );
+    const couponDiscount = Number(
+      selectedInvoice.coupon_discount ??
+        selectedInvoice.discount_breakdown?.coupon_discount ??
+        0
+    );
     doc.setFont("helvetica", "bold");
     doc.text(`Subtotal: Rs.${selectedInvoice.subtotal.toLocaleString()}`, rightX, summaryY, { align: "right" });
     summaryY += 6;
     doc.text(`Total GST: Rs.${selectedInvoice.total_gst.toLocaleString()}`, rightX, summaryY, { align: "right" });
     summaryY += 6;
-    doc.text(`Discount: Rs.${selectedInvoice.discount.toLocaleString()}`, rightX, summaryY, { align: "right" });
+    doc.text(`Manual Discount: Rs.${manualDiscount.toLocaleString()}`, rightX, summaryY, { align: "right" });
+    summaryY += 6;
+    doc.text(`Coupon Discount: Rs.${couponDiscount.toLocaleString()}`, rightX, summaryY, { align: "right" });
+    summaryY += 6;
+    doc.text(`Total Discount: Rs.${selectedInvoice.discount.toLocaleString()}`, rightX, summaryY, { align: "right" });
     summaryY += 7;
     doc.setFontSize(12);
     doc.text(`Final Amount: Rs.${selectedInvoice.final_amount.toLocaleString()}`, rightX, summaryY, { align: "right" });
@@ -550,14 +618,25 @@ const Invoices = () => {
   const handleDownloadInvoiceExcel = () => {
     if (!selectedInvoice) return;
 
-    const itemsSheet = selectedInvoice.line_items.map((li) => ({
-      Item: li.name,
-      Quantity: li.quantity,
-      Price: li.base_price,
-      GSTPercent: li.gst_percent,
-      GSTAmount: li.gst_amount,
-      LineTotal: li.line_total,
-    }));
+    const itemsSheet = selectedInvoice.line_items.flatMap((li) => {
+      const baseRow = [{
+        Item: li.name,
+        Quantity: li.quantity,
+        Price: li.base_price,
+        GSTPercent: li.gst_percent,
+        GSTAmount: li.gst_amount,
+        LineTotal: li.line_total,
+      }];
+      const addonRows = (li.addons || []).map((addon) => ({
+        Item: `+ ${addon.name}`,
+        Quantity: Number(addon.quantity_total ?? addon.quantity_per_item ?? 0),
+        Price: Number(addon.unit_price || 0),
+        GSTPercent: "",
+        GSTAmount: "",
+        LineTotal: Number(addon.line_total || 0),
+      }));
+      return [...baseRow, ...addonRows];
+    });
 
     const summarySheet = [
       { Field: "Bill Number", Value: selectedInvoice.bill_number },
@@ -569,7 +648,11 @@ const Invoices = () => {
       { Field: "Payment Status", Value: selectedInvoice.payment_status },
       { Field: "Subtotal", Value: selectedInvoice.subtotal },
       { Field: "Total GST", Value: selectedInvoice.total_gst },
-      { Field: "Discount", Value: selectedInvoice.discount },
+      { Field: "Manual Discount", Value: Number(selectedInvoice.manual_discount ?? selectedInvoice.discount_breakdown?.manual_discount ?? 0) },
+      { Field: "Coupon Discount", Value: Number(selectedInvoice.coupon_discount ?? selectedInvoice.discount_breakdown?.coupon_discount ?? 0) },
+      { Field: "Total Discount", Value: selectedInvoice.discount },
+      { Field: "Coupon Code", Value: selectedInvoice.coupon_details?.code ?? "" },
+      { Field: "Coupon Type", Value: selectedInvoice.coupon_details?.discount_type ?? "" },
       { Field: "Final Amount", Value: selectedInvoice.final_amount },
     ];
 
@@ -904,11 +987,21 @@ const Invoices = () => {
                   <div className="space-y-1.5">
                     {selectedInvoice.line_items.length > 0 ? (
                       selectedInvoice.line_items.map((li, idx) => (
-                        <div key={`${li.name}-${idx}`} className="grid grid-cols-12 gap-2">
-                          <p className="col-span-5 truncate">{li.name}</p>
-                          <p className="col-span-2 text-right">{li.quantity}</p>
-                          <p className="col-span-2 text-right">{li.base_price.toFixed(0)}</p>
-                          <p className="col-span-3 text-right">{li.line_total.toFixed(0)}</p>
+                        <div key={`${li.name}-${idx}`} className="space-y-0.5">
+                          <div className="grid grid-cols-12 gap-2">
+                            <p className="col-span-5 truncate">{li.name}</p>
+                            <p className="col-span-2 text-right">{li.quantity}</p>
+                            <p className="col-span-2 text-right">{li.base_price.toFixed(0)}</p>
+                            <p className="col-span-3 text-right">{li.line_total.toFixed(0)}</p>
+                          </div>
+                          {(li.addons || []).map((addon, addonIdx) => (
+                            <div key={`${li.name}-${idx}-addon-${addonIdx}`} className="grid grid-cols-12 gap-2 text-[9px] text-slate-600">
+                              <p className="col-span-8 pl-2">
+                                + {addon.name} x{Number(addon.quantity_per_item ?? addon.quantity_total ?? 0)} / item @ Rs {Number(addon.unit_price || 0).toFixed(2)}
+                              </p>
+                              <p className="col-span-4 text-right">Rs {Number(addon.line_total || 0).toFixed(2)}</p>
+                            </div>
+                          ))}
                         </div>
                       ))
                     ) : (
@@ -927,7 +1020,20 @@ const Invoices = () => {
                     <span>Rs.{selectedInvoice.total_gst.toLocaleString()}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span>Discount</span>
+                    <span>Manual Discount</span>
+                    <span>Rs.{Number(selectedInvoice.manual_discount ?? selectedInvoice.discount_breakdown?.manual_discount ?? 0).toLocaleString()}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>
+                      Coupon Discount
+                      {selectedInvoice.coupon_details?.code
+                        ? ` (${selectedInvoice.coupon_details.code} - ${String(selectedInvoice.coupon_details.discount_type || "")})`
+                        : ""}
+                    </span>
+                    <span>Rs.{Number(selectedInvoice.coupon_discount ?? selectedInvoice.discount_breakdown?.coupon_discount ?? 0).toLocaleString()}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Total Discount</span>
                     <span>Rs.{selectedInvoice.discount.toLocaleString()}</span>
                   </div>
                   <div className="flex justify-between font-bold border-t border-dashed border-slate-300 pt-2 text-sm">
@@ -947,4 +1053,5 @@ const Invoices = () => {
 };
 
 export default Invoices;
+
 

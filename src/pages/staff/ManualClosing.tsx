@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+﻿import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 
-const API_BASE = "http://192.168.1.18:8000";
+const API_BASE = "https://billingdemo-irsxd.ondigitalocean.app";
 
 type IngredientRow = {
   id: string;
@@ -20,6 +20,14 @@ type ExistingRow = {
   entered_by: string;
 };
 
+type StockLimitRow = {
+  ingredient_id: string;
+  ingredient_name: string;
+  unit: string;
+  start_stock: string | number;
+  system_closing: string | number;
+};
+
 export default function StaffManualClosing() {
   const navigate = useNavigate();
   const { logout } = useAuth();
@@ -28,8 +36,10 @@ export default function StaffManualClosing() {
   const [ingredients, setIngredients] = useState<IngredientRow[]>([]);
   const [quantities, setQuantities] = useState<Record<string, string>>({});
   const [existingRows, setExistingRows] = useState<ExistingRow[]>([]);
+  const [stockLimits, setStockLimits] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
@@ -63,7 +73,15 @@ export default function StaffManualClosing() {
       if (!res.ok) throw new Error("Failed to load manual closings");
       const data = await res.json();
       const rows = Array.isArray(data?.rows) ? data.rows : [];
+      const limits = Array.isArray(data?.limits) ? (data.limits as StockLimitRow[]) : [];
       setExistingRows(rows);
+      setStockLimits(
+        limits.reduce<Record<string, number>>((acc, row) => {
+          const n = Number(row.start_stock ?? 0);
+          acc[String(row.ingredient_id)] = Number.isFinite(n) && n >= 0 ? n : 0;
+          return acc;
+        }, {})
+      );
       const next: Record<string, string> = {};
       rows.forEach((row: ExistingRow) => {
         next[String(row.ingredient_id)] = String(row.physical_quantity ?? "");
@@ -80,6 +98,25 @@ export default function StaffManualClosing() {
     loadExisting();
   }, [date]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  useEffect(() => {
+    if (!showConfirmModal) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        if (!saving) {
+          setShowConfirmModal(false);
+          void saveManualClosing();
+        }
+      }
+      if (event.key === "Escape") {
+        event.preventDefault();
+        if (!saving) setShowConfirmModal(false);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [showConfirmModal, saving]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const rowsForSubmit = useMemo(
     () =>
       ingredients
@@ -87,10 +124,34 @@ export default function StaffManualClosing() {
         .map((ing) => ({ ingredient: ing.id, quantity: quantities[ing.id] })),
     [ingredients, quantities],
   );
+  const validationErrors = useMemo(() => {
+    const errs: Record<string, string> = {};
+    ingredients.forEach((ing) => {
+      const raw = String(quantities[ing.id] ?? "").trim();
+      if (!raw) {
+        errs[ing.id] = "Required";
+        return;
+      }
+      const qty = Number(raw);
+      if (!Number.isFinite(qty) || qty < 0) {
+        errs[ing.id] = "Invalid qty";
+        return;
+      }
+      const maxAllowed = stockLimits[ing.id] ?? 0;
+      if (qty > maxAllowed) {
+        errs[ing.id] = `Cannot exceed ${maxAllowed}`;
+      }
+    });
+    return errs;
+  }, [ingredients, quantities, stockLimits]);
+  const canSave =
+    ingredients.length > 0 &&
+    ingredients.every((ing) => String(quantities[ing.id] ?? "").trim() !== "") &&
+    Object.keys(validationErrors).length === 0;
 
   const saveManualClosing = async () => {
-    if (!rowsForSubmit.length) {
-      setError("Enter at least one ingredient quantity.");
+    if (!canSave || !rowsForSubmit.length) {
+      setError("Enter all ingredient quantities with valid values before saving.");
       return;
     }
     setSaving(true);
@@ -123,6 +184,14 @@ export default function StaffManualClosing() {
     } finally {
       setSaving(false);
     }
+  };
+
+  const requestSaveManualClosing = () => {
+    if (!canSave || !rowsForSubmit.length) {
+      setError("Enter all ingredient quantities with valid values before saving.");
+      return;
+    }
+    setShowConfirmModal(true);
   };
 
   return (
@@ -159,8 +228,8 @@ export default function StaffManualClosing() {
             className="h-11 rounded-xl border border-violet-200 bg-violet-50/40 px-3 text-sm text-violet-950 outline-none transition focus:border-violet-500 focus:ring-2 focus:ring-violet-200"
           />
           <button
-            onClick={saveManualClosing}
-            disabled={saving}
+            onClick={requestSaveManualClosing}
+            disabled={saving || !canSave}
             className="h-11 rounded-xl bg-[linear-gradient(135deg,#7c3aed_0%,#5b21b6_100%)] px-4 text-sm font-semibold text-white shadow-[0_10px_24px_rgba(109,40,217,0.28)] transition hover:opacity-95 disabled:opacity-60"
           >
             {saving ? "Saving..." : "Save Manual Closing"}
@@ -195,6 +264,7 @@ export default function StaffManualClosing() {
                 <tr className="bg-violet-50/60">
                   <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-[0.12em] text-violet-700">Ingredient</th>
                   <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-[0.12em] text-violet-700">Unit</th>
+                  <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-[0.12em] text-violet-700">Start Stock</th>
                   <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-[0.12em] text-violet-700">Physical Quantity</th>
                 </tr>
               </thead>
@@ -203,13 +273,22 @@ export default function StaffManualClosing() {
                   <tr key={ing.id} className="border-t border-violet-100 transition hover:bg-violet-50/35">
                     <td className="px-5 py-3 text-sm font-semibold text-violet-950">{ing.name}</td>
                     <td className="px-5 py-3 text-sm text-violet-800">{ing.unit}</td>
+                    <td className="px-5 py-3 text-sm font-semibold text-violet-900">
+                      {Number(stockLimits[ing.id] ?? 0).toFixed(3)}
+                    </td>
                     <td className="px-5 py-3 text-sm">
                       <input
                         value={quantities[ing.id] ?? ""}
                         onChange={(e) => setQuantities((prev) => ({ ...prev, [ing.id]: e.target.value }))}
                         placeholder="0"
+                        min={0}
+                        max={stockLimits[ing.id] ?? 0}
+                        type="number"
                         className="h-10 w-36 rounded-xl border border-violet-200 bg-white px-3 text-sm text-violet-950 outline-none transition focus:border-violet-500 focus:ring-2 focus:ring-violet-200"
                       />
+                      {validationErrors[ing.id] ? (
+                        <p className="mt-1 text-xs font-medium text-rose-700">{validationErrors[ing.id]}</p>
+                      ) : null}
                     </td>
                   </tr>
                 ))}
@@ -251,6 +330,40 @@ export default function StaffManualClosing() {
           </div>
         )}
       </div>
+
+      {showConfirmModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-2xl border border-violet-200 bg-white p-5 shadow-2xl">
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-violet-700">Confirm Closing</p>
+            <h3 className="mt-1 text-lg font-bold text-violet-950">Close Stock For The Day?</h3>
+            <p className="mt-2 text-sm text-violet-700/80">
+              This will save manual closing quantities for {date} and end your shift session.
+            </p>
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setShowConfirmModal(false)}
+                disabled={saving}
+                className="rounded-xl border border-violet-200 bg-white px-4 py-2 text-sm font-semibold text-violet-700 transition hover:bg-violet-50 disabled:opacity-60"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowConfirmModal(false);
+                  void saveManualClosing();
+                }}
+                disabled={saving}
+                className="rounded-xl bg-[linear-gradient(135deg,#7c3aed_0%,#5b21b6_100%)] px-4 py-2 text-sm font-semibold text-white transition hover:opacity-95 disabled:opacity-60"
+              >
+                {saving ? "Saving..." : "Yes, Close Now"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
+

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+﻿import { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import {
   BookOpen,
@@ -12,7 +12,7 @@ import {
 
 import FormModal from "./FormModal";
 
-const API_BASE = "http://192.168.1.18:8000";
+const API_BASE = "https://billingdemo-irsxd.ondigitalocean.app";
 
 interface Product {
   id: string;
@@ -1939,3 +1939,4 @@ const saveCombo = async () => {
 };
 
 export default AdminProducts;
+

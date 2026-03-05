@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+﻿import { useEffect, useMemo, useState } from "react";
 
-const API_BASE = "http://192.168.1.18:8000";
+const API_BASE = "https://billingdemo-irsxd.ondigitalocean.app";
 
 type Vendor = {
   id: string;
@@ -25,6 +25,12 @@ const emptyRow = (): PurchaseRow => ({
   unit_price: "",
 });
 
+const toNonNegativeNumber = (value: string): number => {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed < 0) return 0;
+  return parsed;
+};
+
 export default function StaffPurchaseEntry() {
   const token = localStorage.getItem("access");
   const headers = token ? { Authorization: `Bearer ${token}` } : {};
@@ -36,6 +42,7 @@ export default function StaffPurchaseEntry() {
   const [rows, setRows] = useState<PurchaseRow[]>([emptyRow()]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
@@ -74,10 +81,47 @@ export default function StaffPurchaseEntry() {
     loadMasterData();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  useEffect(() => {
+    if (!showConfirmModal) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        if (!saving) void submitPurchase();
+      }
+      if (event.key === "Escape") {
+        event.preventDefault();
+        if (!saving) setShowConfirmModal(false);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [showConfirmModal, saving]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const ingredientUnitMap = useMemo(
     () => Object.fromEntries(ingredients.map((ing) => [ing.id, ing.unit])),
     [ingredients],
   );
+  const totalCost = useMemo(
+    () =>
+      rows.reduce(
+        (sum, row) => sum + toNonNegativeNumber(row.quantity) * toNonNegativeNumber(row.unit_price),
+        0,
+      ),
+    [rows],
+  );
+  const hasInvalidRow = useMemo(
+    () =>
+      rows.some(
+        (r) =>
+          !r.ingredient.trim() ||
+          !r.quantity.trim() ||
+          !r.unit_price.trim() ||
+          toNonNegativeNumber(r.quantity) <= 0 ||
+          toNonNegativeNumber(r.unit_price) < 0
+      ),
+    [rows]
+  );
+  const canSavePurchase = invoiceNo.trim().length > 0 && rows.length > 0 && !hasInvalidRow && !saving && !loading;
 
   const updateRow = (index: number, key: keyof PurchaseRow, value: string) => {
     setRows((prev) =>
@@ -108,6 +152,11 @@ export default function StaffPurchaseEntry() {
       setMessage(null);
       return;
     }
+    if (hasInvalidRow) {
+      setError("Please complete all rows with valid values before saving.");
+      setMessage(null);
+      return;
+    }
 
     setSaving(true);
     setError(null);
@@ -135,11 +184,35 @@ export default function StaffPurchaseEntry() {
       setInvoiceNo("");
       setVendorId("");
       setRows([emptyRow()]);
+      setShowConfirmModal(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to save purchase entry.");
     } finally {
       setSaving(false);
     }
+  };
+
+  const requestSubmitPurchase = () => {
+    const trimmedInvoice = invoiceNo.trim();
+    const validRows = rows.filter(
+      (r) => r.ingredient.trim() && r.quantity.trim() && r.unit_price.trim(),
+    );
+    if (!trimmedInvoice) {
+      setError("Invoice number is required.");
+      setMessage(null);
+      return;
+    }
+    if (!validRows.length) {
+      setError("Add at least one valid purchase row.");
+      setMessage(null);
+      return;
+    }
+    if (hasInvalidRow) {
+      setError("Please complete all rows with valid values before saving.");
+      setMessage(null);
+      return;
+    }
+    setShowConfirmModal(true);
   };
 
   return (
@@ -179,8 +252,8 @@ export default function StaffPurchaseEntry() {
           </div>
           <div className="flex items-end">
             <button
-              onClick={submitPurchase}
-              disabled={saving || loading}
+              onClick={requestSubmitPurchase}
+              disabled={!canSavePurchase}
               className="h-10 w-full rounded-xl bg-[linear-gradient(135deg,#7c3aed_0%,#5b21b6_100%)] px-4 text-sm font-semibold text-white shadow-[0_10px_22px_rgba(109,40,217,0.28)] transition hover:opacity-95 disabled:opacity-60"
             >
               {saving ? "Saving..." : "Save Purchase"}
@@ -218,6 +291,7 @@ export default function StaffPurchaseEntry() {
                 <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-[0.1em] text-violet-700">Unit</th>
                 <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-[0.1em] text-violet-700">Quantity</th>
                 <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-[0.1em] text-violet-700">Unit Cost</th>
+                <th className="px-3 py-2 text-right text-xs font-semibold uppercase tracking-[0.1em] text-violet-700">Total Cost</th>
                 <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-[0.1em] text-violet-700">Action</th>
               </tr>
             </thead>
@@ -257,6 +331,9 @@ export default function StaffPurchaseEntry() {
                       className="h-9 w-28 rounded-lg border border-violet-200 bg-violet-50/40 px-2 text-sm text-violet-950 outline-none transition focus:border-violet-500 focus:ring-2 focus:ring-violet-200"
                     />
                   </td>
+                  <td className="px-3 py-2 text-right text-sm font-semibold text-violet-900">
+                    Rs {(toNonNegativeNumber(row.quantity) * toNonNegativeNumber(row.unit_price)).toFixed(2)}
+                  </td>
                   <td className="px-3 py-2 text-sm">
                     <button
                       onClick={() => removeRow(index)}
@@ -268,10 +345,50 @@ export default function StaffPurchaseEntry() {
                   </td>
                 </tr>
               ))}
+              <tr className="border-t border-violet-200 bg-violet-50/50">
+                <td colSpan={4} className="px-3 py-2 text-right text-sm font-semibold text-violet-800">
+                  Grand Total
+                </td>
+                <td className="px-3 py-2 text-right text-sm font-bold text-violet-950">
+                  Rs {totalCost.toFixed(2)}
+                </td>
+                <td />
+              </tr>
             </tbody>
           </table>
         </div>
       </div>
+
+      {showConfirmModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-2xl border border-violet-200 bg-white p-5 shadow-2xl">
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-violet-700">Confirm Purchase</p>
+            <h3 className="mt-1 text-lg font-bold text-violet-950">Save Purchase Entry?</h3>
+            <p className="mt-2 text-sm text-violet-700/80">
+              This will update inventory stock based on the entered purchase items.
+            </p>
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setShowConfirmModal(false)}
+                disabled={saving}
+                className="rounded-xl border border-violet-200 bg-white px-4 py-2 text-sm font-semibold text-violet-700 transition hover:bg-violet-50 disabled:opacity-60"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => void submitPurchase()}
+                disabled={saving}
+                className="rounded-xl bg-[linear-gradient(135deg,#7c3aed_0%,#5b21b6_100%)] px-4 py-2 text-sm font-semibold text-white transition hover:opacity-95 disabled:opacity-60"
+              >
+                {saving ? "Saving..." : "Yes, Save"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
+

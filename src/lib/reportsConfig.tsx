@@ -1,11 +1,11 @@
-export type ReportDefinition = {
+﻿export type ReportDefinition = {
   key: string;
   name: string;
   desc: string;
   endpoint: string;
 };
 
-const API_BASE = "http://192.168.1.18:8000";
+const API_BASE = "https://billingdemo-irsxd.ondigitalocean.app";
 
 export const STAFF_REPORT_ACCESS_KEY = "staff_report_access_v1";
 export const STAFF_REPORT_ACCESS_BY_USER_KEY = "staff_report_access_by_user_v1";
@@ -163,3 +163,4 @@ export const fetchMyReportAccess = async (token: string): Promise<StaffReportAcc
   const allowed = Array.isArray(data?.allowed_reports) ? data.allowed_reports.map(String) : [];
   return allowedReportsToAccessMap(allowed);
 };
+

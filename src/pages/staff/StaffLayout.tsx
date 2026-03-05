@@ -1,4 +1,4 @@
-import { Outlet, Link, useNavigate, useLocation } from "react-router-dom";
+﻿import { Outlet, Link, useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { handleEnterPrimaryAction } from "@/lib/enterAction";
 import { LogOut, ChevronDown, User, Plus } from "lucide-react";
@@ -112,7 +112,7 @@ const StaffLayout = () => {
 
   if (token) {
     try {
-      await fetch("http://192.168.1.18:8000/api/accounts/logout/", {
+      await fetch("https://billingdemo-irsxd.ondigitalocean.app/api/accounts/logout/", {
         method: "POST",
         headers: {
           Authorization: `Bearer ${token}`,
@@ -286,3 +286,4 @@ const StaffLayout = () => {
 };
 
 export default StaffLayout;
+

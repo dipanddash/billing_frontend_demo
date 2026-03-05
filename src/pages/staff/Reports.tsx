@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+﻿import { useEffect, useMemo, useState } from "react";
 import { Eye, EyeOff, FileDown, FileSpreadsheet } from "lucide-react";
 import * as XLSX from "xlsx";
 import jsPDF from "jspdf";
@@ -11,7 +11,7 @@ import {
   type StaffReportAccessByKey,
 } from "@/lib/reportsConfig";
 
-const API_BASE = "http://192.168.1.18:8000";
+const API_BASE = "https://billingdemo-irsxd.ondigitalocean.app";
 
 type ReportPayload = {
   meta?: Record<string, unknown>;
@@ -689,6 +689,7 @@ export default function StaffReports() {
     </div>
   );
 }
+
 
 
 

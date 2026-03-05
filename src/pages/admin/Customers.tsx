@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+﻿import { useEffect, useMemo, useState } from "react";
 import {
   Search,
   Users,
@@ -22,7 +22,7 @@ import {
 
 /* ================= CONFIG ================= */
 
-const API_BASE = "http://192.168.1.18:8000";
+const API_BASE = "https://billingdemo-irsxd.ondigitalocean.app";
 
 /* ================= TYPES ================= */
 
@@ -47,7 +47,7 @@ const formatDate = (v?: string) => {
   return isNaN(d.getTime()) ? "-" : d.toLocaleDateString();
 };
 
-const money = (v?: number) => `₹${(v ?? 0).toLocaleString()}`;
+const money = (v?: number) => `â‚¹${(v ?? 0).toLocaleString()}`;
 
 const monthLabel = (date: Date) =>
   date.toLocaleDateString("en-US", { month: "short" });
@@ -212,7 +212,7 @@ const Customers = () => {
         </h1>
 
         <p className="mt-1 text-sm text-slate-600">
-          Loyalty • Spending • Analytics
+          Loyalty â€¢ Spending â€¢ Analytics
         </p>
 
         <div className="mt-4 flex flex-wrap gap-2">
@@ -595,6 +595,7 @@ const Info = ({ label, value }: any) => (
 
   </div>
 );
+
 
 
 

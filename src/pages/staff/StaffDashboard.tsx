@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+﻿import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import KPICard from "@/components/KPICard";
 import StatusBadge from "@/components/StatusBadge";
@@ -27,7 +27,7 @@ import {
   YAxis,
 } from "recharts";
 
-const BASE_URL = "http://192.168.1.18:8000";
+const BASE_URL = "https://billingdemo-irsxd.ondigitalocean.app";
 
 const API = {
   dashboard: `${BASE_URL}/api/reports/dashboard/`,
@@ -151,7 +151,23 @@ const StaffDashboard = () => {
         if (dashboardRes.ok) {
           const metrics = pickReportRows(await dashboardRes.json());
 
-          const revenue = metricValue(metrics, "Total Sales", 0);
+          const metricRevenue = metricValue(metrics, "Total Sales", 0);
+          const fallbackRevenue = todayOrders
+            .filter(
+              (o) =>
+                String(o?.payment_status ?? "").toUpperCase() === "PAID" ||
+                String(o?.status ?? "").toUpperCase() === "COMPLETED"
+            )
+            .reduce(
+              (sum, o) =>
+                sum +
+                asNumber(
+                  o?.total_amount ?? o?.amount ?? o?.grand_total ?? o?.final_amount,
+                  0
+                ),
+              0
+            );
+          const revenue = metricRevenue > 0 ? metricRevenue : fallbackRevenue;
           const metricBills = metricValue(metrics, "Total Orders", 0);
           // Prefer live today orders count so dashboard card matches queue/recent blocks.
           const bills = todayOrders.length > 0 ? todayOrders.length : metricBills;
@@ -424,7 +440,7 @@ const StaffDashboard = () => {
           <div className="mt-6 grid grid-cols-2 gap-4 text-white md:grid-cols-4">
             <div>
               <p className="text-xs text-white/70">Gross Revenue</p>
-              <p className="text-xl font-semibold">₹{summary.revenue.toLocaleString()}</p>
+              <p className="text-xl font-semibold">â‚¹{summary.revenue.toLocaleString()}</p>
             </div>
             <div>
               <p className="text-xs text-white/70">Bills Processed</p>
@@ -436,7 +452,7 @@ const StaffDashboard = () => {
             </div>
             <div>
               <p className="text-xs text-white/70">Avg Bill Value</p>
-              <p className="text-xl font-semibold">₹{summary.avgBill}</p>
+              <p className="text-xl font-semibold">â‚¹{summary.avgBill}</p>
             </div>
           </div>
         </div>
@@ -445,7 +461,7 @@ const StaffDashboard = () => {
       <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <KPICard
           title="Total Revenue"
-          value={`₹${summary.revenue.toLocaleString()}`}
+          value={`â‚¹${summary.revenue.toLocaleString()}`}
           subtitle="Compared to yesterday"
           icon={<CircleDollarSign className="h-4 w-4" />}
           trend={{ value: `${todayTotals.revenueTrend}%`, positive: todayTotals.revenueTrend >= 0 }}
@@ -510,7 +526,7 @@ const StaffDashboard = () => {
 
           <div className="mt-4">
             <div className="mb-1 flex items-center justify-between text-xs">
-              <span className="text-muted-foreground">Revenue target: ₹{summary.target.toLocaleString()}</span>
+              <span className="text-muted-foreground">Revenue target: â‚¹{summary.target.toLocaleString()}</span>
               <span className="font-semibold text-foreground">{summary.targetProgress}%</span>
             </div>
             <div className="h-2 overflow-hidden rounded-full bg-secondary">
@@ -763,5 +779,6 @@ const StaffDashboard = () => {
 };
 
 export default StaffDashboard;
+
 
 

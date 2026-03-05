@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+﻿import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { ShoppingCart, Tag } from "lucide-react";
 
@@ -6,7 +6,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
-const BASE_URL = "http://192.168.1.18:8000";
+const BASE_URL = "https://billingdemo-irsxd.ondigitalocean.app";
 const HOLD_CART_KEY = "staff_pos_hold_cart_v1";
 
 /* ================= TYPES ================= */
@@ -100,6 +100,22 @@ interface InvoiceLineItem {
   quantity: number;
   base_price: number;
   line_total: number;
+  addons?: InvoiceLineItemAddon[];
+}
+
+interface InvoiceLineItemAddon {
+  name: string;
+  quantity_per_item?: number;
+  quantity_total?: number;
+  unit_price?: number;
+  line_total?: number;
+}
+
+interface InvoiceCouponDetails {
+  code?: string;
+  discount_type?: "AMOUNT" | "PERCENT" | string;
+  value?: number | string;
+  discount_amount?: number | string;
 }
 
 interface InvoiceData {
@@ -110,6 +126,15 @@ interface InvoiceData {
   subtotal: number | string;
   total_gst: number | string;
   discount: number | string;
+  manual_discount?: number | string;
+  coupon_discount?: number | string;
+  discount_type?: string;
+  coupon_details?: InvoiceCouponDetails | null;
+  discount_breakdown?: {
+    manual_discount?: number | string;
+    coupon_discount?: number | string;
+    total_discount?: number | string;
+  };
   final_amount: number | string;
   line_items?: InvoiceLineItem[];
   items?: InvoiceLineItem[];
@@ -944,6 +969,15 @@ export default function SalesTransactionPage() {
   const total = Math.max(0, grossTotal - discountAmount);
   const cashGivenAmount = Number(cashGiven || 0);
   const cashBalance = Number.isFinite(cashGivenAmount) ? cashGivenAmount - total : 0;
+  const manualDiscountDisplayValue =
+    discountMode === "percent"
+      ? `${Number(discountPercentInput || 0).toFixed(2)}%`
+      : `Rs ${manualDiscountAmount.toFixed(2)}`;
+  const couponTypeLabel = appliedCoupon
+    ? appliedCoupon.discount_type === "PERCENT"
+      ? `${Number(appliedCoupon.value || 0).toFixed(2)}%`
+      : `Rs ${Number(appliedCoupon.value || 0).toFixed(2)}`
+    : "";
 
   const syncFromPercent = (rawPercent: string, baseTotal: number) => {
     const parsedPercent = parseNonNegative(rawPercent);
@@ -1190,8 +1224,29 @@ export default function SalesTransactionPage() {
 
   const closeInvoicePreview = () => {
     setInvoiceData(null);
+    setOrderDetails(null);
     setRuntimeOrderId(null);
-    navigate("/staff/pos", { replace: true });
+    setCart([]);
+    setPosNotice("");
+    setShowPaymentModal(false);
+    setPaymentError("");
+    setPaymentReference("");
+    setCashGiven("");
+    setDiscountPercentInput("");
+    setDiscountAmountInput("");
+    setDiscountMode("amount");
+    setCouponCodeInput("");
+    setAppliedCoupon(null);
+    setCouponError("");
+    setPendingSelection(null);
+    setPendingQty("1");
+    setPendingQtyError("");
+    setPendingAddonSearch("");
+    setShowAllAddonsModal(false);
+    setPendingAddonEditorId(null);
+    setPendingAddonEditorQty("1");
+    setPendingAddonEditorError("");
+    window.location.replace("/staff/pos");
   };
 
   const confirmTakeawayPayment = async () => {
@@ -1439,11 +1494,27 @@ export default function SalesTransactionPage() {
 
   const invoiceLineItems = useMemo(() => {
     if (!invoiceData) return [];
-    if (Array.isArray(invoiceData.line_items) && invoiceData.line_items.length > 0) {
-      return invoiceData.line_items;
-    }
-    return Array.isArray(invoiceData.items) ? invoiceData.items : [];
+    const rows =
+      Array.isArray(invoiceData.line_items) && invoiceData.line_items.length > 0
+        ? invoiceData.line_items
+        : Array.isArray(invoiceData.items)
+        ? invoiceData.items
+        : [];
+    return rows.map((li) => ({
+      ...li,
+      addons: Array.isArray(li.addons) ? li.addons : [],
+    }));
   }, [invoiceData]);
+  const invoiceManualDiscount = Number(
+    invoiceData?.manual_discount ??
+      invoiceData?.discount_breakdown?.manual_discount ??
+      0
+  );
+  const invoiceCouponDiscount = Number(
+    invoiceData?.coupon_discount ??
+      invoiceData?.discount_breakdown?.coupon_discount ??
+      0
+  );
 
   return (
     <div className="pos-page min-h-screen p-4 md:p-">
@@ -1749,9 +1820,13 @@ export default function SalesTransactionPage() {
                           </button>
                         )}
                         {item.selectedAddons && item.selectedAddons.length > 0 && (
-                          <p className="mt-0.5 line-clamp-2 text-[10px] text-purple-700/80">
-                            {item.selectedAddons.map((addon) => `${addon.name} x${addon.qty}`).join(", ")}
-                          </p>
+                          <div className="mt-1 space-y-0.5 text-[10px] text-purple-700/85">
+                            {item.selectedAddons.map((addon) => (
+                              <p key={`${item.key}-addon-${addon.id}`}>
+                                + {addon.name} x{addon.qty} @ Rs {addon.price.toFixed(2)} = Rs {(addon.qty * addon.price).toFixed(2)} / item
+                              </p>
+                            ))}
+                          </div>
                         )}
                       </div>
                     </div>
@@ -1882,16 +1957,26 @@ export default function SalesTransactionPage() {
                 </div>
                 {appliedCoupon && (
                   <p className="mt-2 text-[11px] font-medium text-emerald-700">
-                    Applied: {appliedCoupon.code} (- Rs {couponDiscountAmount.toFixed(2)})
+                    Applied: {appliedCoupon.code} ({appliedCoupon.discount_type} {couponTypeLabel}) (- Rs {couponDiscountAmount.toFixed(2)})
                   </p>
                 )}
                 {couponError && (
                   <p className="mt-2 text-[11px] font-medium text-rose-700">{couponError}</p>
                 )}
               </div>
-              <div className="flex justify-between text-sm text-purple-800">
-                <span>Discount</span>
-                <span>- Rs {discountAmount.toFixed(2)}</span>
+              <div className="space-y-1 rounded-lg border border-purple-100 bg-purple-50/30 p-2">
+                <div className="flex justify-between text-xs text-purple-800">
+                  <span>Discount ({discountMode === "percent" ? "Percent" : "Amount"}: {manualDiscountDisplayValue})</span>
+                  <span>- Rs {manualDiscountAmount.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between text-xs text-purple-800">
+                  <span>Coupon Discount {appliedCoupon ? `(${appliedCoupon.code} - ${appliedCoupon.discount_type})` : ""}</span>
+                  <span>- Rs {couponDiscountAmount.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between text-sm font-semibold text-purple-900">
+                  <span>Total Discount</span>
+                  <span>- Rs {discountAmount.toFixed(2)}</span>
+                </div>
               </div>
               <div className="flex justify-between text-base font-semibold text-purple-950">
                 <span>Total</span>
@@ -2053,7 +2138,7 @@ export default function SalesTransactionPage() {
                       <span>Rs {pendingAddonUnitTotal.toFixed(2)}</span>
                     </div>
                     <div className="mt-1 flex items-center justify-between border-t border-purple-100 pt-1.5 font-semibold">
-                      <span>Item Total x Qty</span>
+                      <span>Item Total</span>
                       <span>
                         Rs {(pendingProductUnitPrice * Math.max(1, Number(pendingQty) || 1)).toFixed(2)}
                       </span>
@@ -2165,11 +2250,21 @@ export default function SalesTransactionPage() {
                     <div className="space-y-1.5">
                       {invoiceLineItems.length > 0 ? (
                         invoiceLineItems.map((li, idx) => (
-                          <div key={`${li.name}-${idx}`} className="grid grid-cols-12 gap-2">
-                            <p className="col-span-5 truncate">{li.name}</p>
-                            <p className="col-span-2 text-right">{li.quantity}</p>
-                            <p className="col-span-2 text-right">{Number(li.base_price || 0).toFixed(0)}</p>
-                            <p className="col-span-3 text-right">{Number(li.line_total || 0).toFixed(0)}</p>
+                          <div key={`${li.name}-${idx}`} className="space-y-0.5">
+                            <div className="grid grid-cols-12 gap-2">
+                              <p className="col-span-5 truncate">{li.name}</p>
+                              <p className="col-span-2 text-right">{li.quantity}</p>
+                              <p className="col-span-2 text-right">{Number(li.base_price || 0).toFixed(0)}</p>
+                              <p className="col-span-3 text-right">{Number(li.line_total || 0).toFixed(0)}</p>
+                            </div>
+                            {(li.addons ?? []).map((addon, addonIdx) => (
+                              <div key={`${li.name}-${idx}-addon-${addonIdx}`} className="grid grid-cols-12 gap-2 text-[9px] text-slate-600">
+                                <p className="col-span-8 pl-2">
+                                  + {addon.name} x{Number(addon.quantity_per_item ?? addon.quantity_total ?? 0)} / item @ Rs {Number(addon.unit_price || 0).toFixed(2)}
+                                </p>
+                                <p className="col-span-4 text-right">Rs {Number(addon.line_total || 0).toFixed(2)}</p>
+                              </div>
+                            ))}
                           </div>
                         ))
                       ) : (
@@ -2189,6 +2284,19 @@ export default function SalesTransactionPage() {
                     </div>
                     <div className="flex justify-between">
                       <span>Discount</span>
+                      <span>Rs.{invoiceManualDiscount.toLocaleString()}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>
+                        Coupon Discount
+                        {invoiceData?.coupon_details?.code
+                          ? ` (${invoiceData.coupon_details.code} - ${String(invoiceData.coupon_details.discount_type || "")})`
+                          : ""}
+                      </span>
+                      <span>Rs.{invoiceCouponDiscount.toLocaleString()}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Total Discount</span>
                       <span>Rs.{Number(invoiceData?.discount || 0).toLocaleString()}</span>
                     </div>
                     <div className="flex justify-between border-t border-dashed border-slate-300 pt-2 text-sm font-bold">
@@ -2206,7 +2314,7 @@ export default function SalesTransactionPage() {
                     onClick={() => window.print()}
                     className="rounded-md bg-slate-900 px-4 py-2 text-xs font-semibold text-white hover:bg-black"
                   >
-                    Thermal Print
+                    Print
                   </button>
                   <button
                     onClick={closeInvoicePreview}
@@ -2285,6 +2393,21 @@ export default function SalesTransactionPage() {
               </div>
             )}
 
+            {paymentMethod === "UPI" && (
+              <div className="mb-3">
+                <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-purple-700">UPI ID</label>
+                <Input
+                  value={paymentReference}
+                  onChange={(e) => {
+                    setPaymentReference(e.target.value);
+                    setPaymentError("");
+                  }}
+                  placeholder="Enter UPI ID"
+                  className="h-11 rounded-xl border-purple-200 bg-white text-purple-950 placeholder:text-purple-400 focus-visible:ring-purple-300"
+                />
+              </div>
+            )}
+
             {paymentError && <p className="mb-3 text-sm font-medium text-violet-700">{paymentError}</p>}
 
             <div className="mb-4 rounded-xl border border-purple-100 bg-purple-50/60 px-3 py-2 text-sm text-purple-800">
@@ -2327,3 +2450,4 @@ export default function SalesTransactionPage() {
     </div>
   );
 }
+

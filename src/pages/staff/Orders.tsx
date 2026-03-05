@@ -1,4 +1,4 @@
-import StatusBadge from "@/components/StatusBadge";
+﻿import StatusBadge from "@/components/StatusBadge";
 import {
   AlertCircle,
   BadgeIndianRupee,
@@ -12,7 +12,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 
-const BASE_URL = "http://192.168.1.18:8000";
+const BASE_URL = "https://billingdemo-irsxd.ondigitalocean.app";
 
 interface OrderRow {
   id: string;
@@ -35,6 +35,13 @@ interface InvoiceItem {
   gst_percent: number;
   line_gst: number | string;
   line_total: number;
+  addons?: Array<{
+    name: string;
+    quantity_per_item?: number;
+    quantity_total?: number;
+    unit_price?: number | string;
+    line_total?: number | string;
+  }>;
 }
 
 interface InvoiceData {
@@ -49,6 +56,13 @@ interface InvoiceData {
     quantity: number;
     base_price: number;
     line_total: number;
+    addons?: Array<{
+      name: string;
+      quantity_per_item?: number;
+      quantity_total?: number;
+      unit_price?: number | string;
+      line_total?: number | string;
+    }>;
   }>;
   order_type?: string;
   staff?: string;
@@ -56,6 +70,19 @@ interface InvoiceData {
   subtotal: number | string;
   total_gst: number | string;
   discount: number;
+  manual_discount?: number | string;
+  coupon_discount?: number | string;
+  coupon_details?: {
+    code?: string;
+    discount_type?: string;
+    value?: number | string;
+    discount_amount?: number | string;
+  } | null;
+  discount_breakdown?: {
+    manual_discount?: number | string;
+    coupon_discount?: number | string;
+    total_discount?: number | string;
+  };
   grand_total: number;
   final_amount: number | string;
 }
@@ -352,20 +379,40 @@ const Orders = () => {
 
     const formatAmount = (value: number | string) => Number(value || 0).toLocaleString();
     const itemRows = (data.line_items && data.line_items.length > 0
-      ? data.line_items.map((item) => [
-          item.name,
-          String(item.quantity),
-          Number(item.base_price || 0).toFixed(2),
-          "-",
-          Number(item.line_total || 0).toFixed(2),
-        ])
-      : (data.items || []).map((item) => [
-          item.name,
-          String(item.quantity),
-          Number(item.base_price || 0).toFixed(2),
-          Number(item.gst_percent || 0).toFixed(2),
-          Number(item.line_total || 0).toFixed(2),
-        ])) as string[][];
+      ? data.line_items.flatMap((item) => {
+          const baseRow = [[
+            item.name,
+            String(item.quantity),
+            Number(item.base_price || 0).toFixed(2),
+            "-",
+            Number(item.line_total || 0).toFixed(2),
+          ]];
+          const addonRows = (item.addons || []).map((addon) => [
+            `  + ${addon.name} x${Number(addon.quantity_per_item ?? addon.quantity_total ?? 0)} @ ${Number(addon.unit_price || 0).toFixed(2)}`,
+            "",
+            "",
+            "",
+            Number(addon.line_total || 0).toFixed(2),
+          ]);
+          return [...baseRow, ...addonRows];
+        })
+      : (data.items || []).flatMap((item) => {
+          const baseRow = [[
+            item.name,
+            String(item.quantity),
+            Number(item.base_price || 0).toFixed(2),
+            Number(item.gst_percent || 0).toFixed(2),
+            Number(item.line_total || 0).toFixed(2),
+          ]];
+          const addonRows = (item.addons || []).map((addon) => [
+            `  + ${addon.name} x${Number(addon.quantity_per_item ?? addon.quantity_total ?? 0)} @ ${Number(addon.unit_price || 0).toFixed(2)}`,
+            "",
+            "",
+            "",
+            Number(addon.line_total || 0).toFixed(2),
+          ]);
+          return [...baseRow, ...addonRows];
+        })) as string[][];
 
     doc.setFontSize(14);
     doc.setFont("helvetica", "bold");
@@ -428,7 +475,11 @@ const Orders = () => {
     summaryY += 6;
     doc.text(`Total GST: Rs.${formatAmount(data.total_gst)}`, rightX, summaryY, { align: "right" });
     summaryY += 6;
-    doc.text(`Discount: Rs.${formatAmount(data.discount)}`, rightX, summaryY, { align: "right" });
+    doc.text(`Manual Discount: Rs.${formatAmount(data.manual_discount ?? data.discount_breakdown?.manual_discount ?? 0)}`, rightX, summaryY, { align: "right" });
+    summaryY += 6;
+    doc.text(`Coupon Discount: Rs.${formatAmount(data.coupon_discount ?? data.discount_breakdown?.coupon_discount ?? 0)}`, rightX, summaryY, { align: "right" });
+    summaryY += 6;
+    doc.text(`Total Discount: Rs.${formatAmount(data.discount)}`, rightX, summaryY, { align: "right" });
     summaryY += 7;
     doc.setFontSize(12);
     doc.text(`Final Amount: Rs.${formatAmount(data.final_amount)}`, rightX, summaryY, { align: "right" });
@@ -456,7 +507,10 @@ const Orders = () => {
   const invoiceLineItems = useMemo(() => {
     if (!invoiceData) return [];
     if (invoiceData.line_items && invoiceData.line_items.length > 0) {
-      return invoiceData.line_items;
+      return invoiceData.line_items.map((item) => ({
+        ...item,
+        addons: Array.isArray(item.addons) ? item.addons : [],
+      }));
     }
 
     return (invoiceData.items || []).map((item) => ({
@@ -464,8 +518,19 @@ const Orders = () => {
       quantity: item.quantity,
       base_price: Number(item.base_price || 0),
       line_total: Number(item.line_total || 0),
+      addons: Array.isArray(item.addons) ? item.addons : [],
     }));
   }, [invoiceData]);
+  const invoiceManualDiscount = Number(
+    invoiceData?.manual_discount ??
+      invoiceData?.discount_breakdown?.manual_discount ??
+      0
+  );
+  const invoiceCouponDiscount = Number(
+    invoiceData?.coupon_discount ??
+      invoiceData?.discount_breakdown?.coupon_discount ??
+      0
+  );
 
   return (
     <div className="orders-page relative min-h-screen overflow-hidden bg-[linear-gradient(140deg,#f6f1ff_0%,#fcfbff_48%,#efe7ff_100%)] p-4 md:p-6">
@@ -751,11 +816,21 @@ const Orders = () => {
                   <div className="space-y-1.5">
                     {invoiceLineItems.length > 0 ? (
                       invoiceLineItems.map((li, idx) => (
-                        <div key={`${li.name}-${idx}`} className="grid grid-cols-12 gap-2">
-                          <p className="col-span-5 truncate">{li.name}</p>
-                          <p className="col-span-2 text-right">{li.quantity}</p>
-                          <p className="col-span-2 text-right">{Number(li.base_price).toFixed(0)}</p>
-                          <p className="col-span-3 text-right">{Number(li.line_total).toFixed(0)}</p>
+                        <div key={`${li.name}-${idx}`} className="space-y-0.5">
+                          <div className="grid grid-cols-12 gap-2">
+                            <p className="col-span-5 truncate">{li.name}</p>
+                            <p className="col-span-2 text-right">{li.quantity}</p>
+                            <p className="col-span-2 text-right">{Number(li.base_price).toFixed(0)}</p>
+                            <p className="col-span-3 text-right">{Number(li.line_total).toFixed(0)}</p>
+                          </div>
+                          {(li.addons || []).map((addon, addonIdx) => (
+                            <div key={`${li.name}-${idx}-addon-${addonIdx}`} className="grid grid-cols-12 gap-2 text-[9px] text-slate-600">
+                              <p className="col-span-8 pl-2">
+                                + {addon.name} x{Number(addon.quantity_per_item ?? addon.quantity_total ?? 0)} / item @ Rs {Number(addon.unit_price || 0).toFixed(2)}
+                              </p>
+                              <p className="col-span-4 text-right">Rs {Number(addon.line_total || 0).toFixed(2)}</p>
+                            </div>
+                          ))}
                         </div>
                       ))
                     ) : (
@@ -774,7 +849,20 @@ const Orders = () => {
                     <span>Rs.{Number(invoiceData.total_gst).toLocaleString()}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span>Discount</span>
+                    <span>Manual Discount</span>
+                    <span>Rs.{invoiceManualDiscount.toLocaleString()}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>
+                      Coupon Discount
+                      {invoiceData.coupon_details?.code
+                        ? ` (${invoiceData.coupon_details.code} - ${String(invoiceData.coupon_details.discount_type || "")})`
+                        : ""}
+                    </span>
+                    <span>Rs.{invoiceCouponDiscount.toLocaleString()}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Total Discount</span>
                     <span>Rs.{Number(invoiceData.discount).toLocaleString()}</span>
                   </div>
                   <div className="flex justify-between font-bold border-t border-dashed border-slate-300 pt-2 text-sm">
@@ -954,4 +1042,5 @@ function StatCard({
 }
 
 export default Orders;
+
 
