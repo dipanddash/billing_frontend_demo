@@ -22,7 +22,7 @@ import {
 
 /* ================= CONFIG ================= */
 
-const API_BASE = "https://billingdemo-irsxd.ondigitalocean.app";
+const API_BASE = "http://192.168.1.18:8000";
 
 /* ================= TYPES ================= */
 
@@ -595,6 +595,7 @@ const Info = ({ label, value }: any) => (
 
   </div>
 );
+
 
 
 

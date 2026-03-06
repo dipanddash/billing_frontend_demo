@@ -10,7 +10,7 @@ import {
   type StaffUserOption,
 } from "@/lib/reportsConfig";
 
-const API_BASE = "https://billingdemo-irsxd.ondigitalocean.app";
+const API_BASE = "http://192.168.1.18:8000";
 
 type AccessConfig = {
   roleLabel: string;
@@ -420,5 +420,6 @@ const AdminProfile = () => {
 };
 
 export default AdminProfile;
+
 
 

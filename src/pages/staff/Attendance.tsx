@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { Clock3, Eye, EyeOff, LogOut, UserPlus } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 
-const API_BASE = "https://billingdemo-irsxd.ondigitalocean.app";
+const API_BASE = "http://192.168.1.18:8000";
 
 export default function StaffAttendance() {
   const navigate = useNavigate();
@@ -175,4 +175,5 @@ export default function StaffAttendance() {
     </div>
   );
 }
+
 

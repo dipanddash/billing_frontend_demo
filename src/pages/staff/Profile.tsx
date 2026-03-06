@@ -19,7 +19,7 @@ import {
   UtensilsCrossed,
 } from "lucide-react";
 
-const BASE_URL = "https://billingdemo-irsxd.ondigitalocean.app";
+const BASE_URL = "http://192.168.1.18:8000";
 
 const API_LINKS = {
   me: `${BASE_URL}/api/accounts/me/`,
@@ -464,6 +464,7 @@ const StaffProfile = () => {
 };
 
 export default StaffProfile;
+
 
 
 

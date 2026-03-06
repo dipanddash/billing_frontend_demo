@@ -1,6 +1,6 @@
 ﻿import { useEffect, useMemo, useState } from "react";
 
-const API_BASE = "https://billingdemo-irsxd.ondigitalocean.app";
+const API_BASE = "http://192.168.1.18:8000";
 
 type Vendor = {
   id: string;
@@ -18,6 +18,36 @@ type PurchaseRow = {
   quantity: string;
   unit_price: string;
 };
+
+const NEW_INGREDIENT_VALUE = "__add_new__";
+const UNIT_OPTIONS = [
+  "pcs",
+  "kg",
+  "g",
+  "mg",
+  "L",
+  "ml",
+  "dozen",
+  "pack",
+  "box",
+  "bag",
+  "bottle",
+  "can",
+  "tin",
+  "tray",
+  "sachet",
+  "roll",
+  "loaf",
+  "bunch",
+  "jar",
+  "cup",
+  "tbsp",
+  "tsp",
+  "slice",
+  "set",
+  "unit",
+  "other",
+] as const;
 
 const emptyRow = (): PurchaseRow => ({
   ingredient: "",
@@ -43,6 +73,12 @@ export default function StaffPurchaseEntry() {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [showAddIngredientModal, setShowAddIngredientModal] = useState(false);
+  const [addIngredientRowIndex, setAddIngredientRowIndex] = useState<number | null>(null);
+  const [newIngredientName, setNewIngredientName] = useState("");
+  const [newIngredientUnit, setNewIngredientUnit] = useState<string>("pcs");
+  const [newIngredientCustomUnit, setNewIngredientCustomUnit] = useState("");
+  const [addingIngredient, setAddingIngredient] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
@@ -130,6 +166,78 @@ export default function StaffPurchaseEntry() {
         return { ...row, [key]: value };
       }),
     );
+  };
+
+  const openAddIngredientModal = (rowIndex: number) => {
+    setAddIngredientRowIndex(rowIndex);
+    setNewIngredientName("");
+    setNewIngredientUnit("pcs");
+    setNewIngredientCustomUnit("");
+    setShowAddIngredientModal(true);
+  };
+
+  const saveNewIngredient = async () => {
+    const name = newIngredientName.trim();
+    const unit =
+      newIngredientUnit === "other" ? newIngredientCustomUnit.trim() : newIngredientUnit.trim();
+
+    if (!name) {
+      setError("Ingredient name is required.");
+      setMessage(null);
+      return;
+    }
+    if (!unit) {
+      setError("Unit is required.");
+      setMessage(null);
+      return;
+    }
+
+    setAddingIngredient(true);
+    setError(null);
+    try {
+      const res = await fetch(`${API_BASE}/api/inventory/ingredients/`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...headers },
+        body: JSON.stringify({
+          name,
+          unit,
+          current_stock: 0,
+          min_stock: 0,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const detail =
+          (data as { detail?: string; error?: string })?.detail ||
+          (data as { detail?: string; error?: string })?.error ||
+          "Failed to add ingredient.";
+        throw new Error(String(detail));
+      }
+
+      const created: Ingredient = {
+        id: String((data as { id?: string }).id ?? ""),
+        name: String((data as { name?: string }).name ?? name).toUpperCase(),
+        unit: String((data as { unit?: string }).unit ?? unit),
+      };
+      if (!created.id) {
+        throw new Error("Ingredient created but id missing.");
+      }
+
+      setIngredients((prev) =>
+        [...prev, created].sort((a, b) => a.name.localeCompare(b.name))
+      );
+
+      if (addIngredientRowIndex !== null) {
+        updateRow(addIngredientRowIndex, "ingredient", created.id);
+      }
+
+      setShowAddIngredientModal(false);
+      setMessage(`Ingredient ${created.name} added.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to add ingredient.");
+    } finally {
+      setAddingIngredient(false);
+    }
   };
 
   const addRow = () => setRows((prev) => [...prev, emptyRow()]);
@@ -301,7 +409,14 @@ export default function StaffPurchaseEntry() {
                   <td className="px-3 py-2 text-sm">
                     <select
                       value={row.ingredient}
-                      onChange={(e) => updateRow(index, "ingredient", e.target.value)}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        if (value === NEW_INGREDIENT_VALUE) {
+                          openAddIngredientModal(index);
+                          return;
+                        }
+                        updateRow(index, "ingredient", value);
+                      }}
                       className="h-9 w-full rounded-lg border border-violet-200 bg-violet-50/40 px-2 text-sm text-violet-950 outline-none transition focus:border-violet-500 focus:ring-2 focus:ring-violet-200"
                     >
                       <option value="">Select Ingredient</option>
@@ -310,6 +425,7 @@ export default function StaffPurchaseEntry() {
                           {ing.name}
                         </option>
                       ))}
+                      <option value={NEW_INGREDIENT_VALUE}>+ Add New Ingredient</option>
                     </select>
                   </td>
                   <td className="px-3 py-2 text-sm font-medium text-violet-900">{row.ingredient ? ingredientUnitMap[row.ingredient] : "-"}</td>
@@ -388,7 +504,76 @@ export default function StaffPurchaseEntry() {
           </div>
         </div>
       )}
+
+      {showAddIngredientModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-2xl border border-violet-200 bg-white p-5 shadow-2xl">
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-violet-700">Add Ingredient</p>
+            <h3 className="mt-1 text-lg font-bold text-violet-950">Create New Ingredient</h3>
+            <p className="mt-2 text-sm text-violet-700/80">
+              Add an ingredient and select its unit type. It will be available in the dropdown.
+            </p>
+
+            <div className="mt-4 space-y-3">
+              <div>
+                <label className="mb-1 block text-xs font-semibold uppercase tracking-[0.12em] text-violet-700">Ingredient Name</label>
+                <input
+                  value={newIngredientName}
+                  onChange={(e) => setNewIngredientName(e.target.value)}
+                  placeholder="Ex: MAYONNAISE"
+                  className="h-10 w-full rounded-xl border border-violet-200 bg-violet-50/40 px-3 text-sm text-violet-950 outline-none transition focus:border-violet-500 focus:ring-2 focus:ring-violet-200"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-semibold uppercase tracking-[0.12em] text-violet-700">Unit Type</label>
+                <select
+                  value={newIngredientUnit}
+                  onChange={(e) => setNewIngredientUnit(e.target.value)}
+                  className="h-10 w-full rounded-xl border border-violet-200 bg-violet-50/40 px-3 text-sm text-violet-950 outline-none transition focus:border-violet-500 focus:ring-2 focus:ring-violet-200"
+                >
+                  {UNIT_OPTIONS.map((unit) => (
+                    <option key={unit} value={unit}>
+                      {unit.toUpperCase()}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              {newIngredientUnit === "other" ? (
+                <div>
+                  <label className="mb-1 block text-xs font-semibold uppercase tracking-[0.12em] text-violet-700">Custom Unit</label>
+                  <input
+                    value={newIngredientCustomUnit}
+                    onChange={(e) => setNewIngredientCustomUnit(e.target.value)}
+                    placeholder="Ex: BUNDLE"
+                    className="h-10 w-full rounded-xl border border-violet-200 bg-violet-50/40 px-3 text-sm text-violet-950 outline-none transition focus:border-violet-500 focus:ring-2 focus:ring-violet-200"
+                  />
+                </div>
+              ) : null}
+            </div>
+
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setShowAddIngredientModal(false)}
+                disabled={addingIngredient}
+                className="rounded-xl border border-violet-200 bg-white px-4 py-2 text-sm font-semibold text-violet-700 transition hover:bg-violet-50 disabled:opacity-60"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => void saveNewIngredient()}
+                disabled={addingIngredient}
+                className="rounded-xl bg-[linear-gradient(135deg,#7c3aed_0%,#5b21b6_100%)] px-4 py-2 text-sm font-semibold text-white transition hover:opacity-95 disabled:opacity-60"
+              >
+                {addingIngredient ? "Saving..." : "Save Ingredient"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
+
 

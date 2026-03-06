@@ -33,7 +33,7 @@ const Login = () => {
     setIsSigningIn(true);
 
     try {
-      const loginResponse = await fetch("https://billingdemo-irsxd.ondigitalocean.app/api/accounts/login/", {
+      const loginResponse = await fetch("http://192.168.1.18:8000/api/accounts/login/", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ username, password }),
@@ -45,7 +45,7 @@ const Login = () => {
         throw new Error(extractErrorMessage(loginData, "Invalid credentials"));
       }
 
-      const tokenResponse = await fetch("https://billingdemo-irsxd.ondigitalocean.app/api/accounts/token/", {
+      const tokenResponse = await fetch("http://192.168.1.18:8000/api/accounts/token/", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ username, password }),
@@ -218,4 +218,5 @@ const Login = () => {
 };
 
 export default Login;
+
 

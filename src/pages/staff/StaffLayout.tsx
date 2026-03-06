@@ -112,7 +112,7 @@ const StaffLayout = () => {
 
   if (token) {
     try {
-      await fetch("https://billingdemo-irsxd.ondigitalocean.app/api/accounts/logout/", {
+      await fetch("http://192.168.1.18:8000/api/accounts/logout/", {
         method: "POST",
         headers: {
           Authorization: `Bearer ${token}`,
@@ -149,7 +149,7 @@ const StaffLayout = () => {
               <img
                 src="/logo.png"
                 alt="CAFEFLOW"
-                className="h-12 w-auto object-contain"
+                className="h-16 w-auto object-contain"
               />
             </Link>
 
@@ -286,4 +286,5 @@ const StaffLayout = () => {
 };
 
 export default StaffLayout;
+
 

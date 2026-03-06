@@ -9,7 +9,7 @@ import {
 
 /* ================= CONFIG ================= */
 
-const BASE_URL = "https://billingdemo-irsxd.ondigitalocean.app";
+const BASE_URL = "http://192.168.1.18:8000";
 
 /* ================= TYPES ================= */
 
@@ -348,6 +348,7 @@ const OrderCard = ({
 };
 
 export default Kitchen;
+
 
 
 

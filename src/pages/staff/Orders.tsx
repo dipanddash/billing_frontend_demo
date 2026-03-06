@@ -4,6 +4,7 @@ import {
   BadgeIndianRupee,
   CheckCircle2,
   FileText,
+  Instagram,
   
   ShoppingBag,
   Wallet,
@@ -12,7 +13,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 
-const BASE_URL = "https://billingdemo-irsxd.ondigitalocean.app";
+const BASE_URL = "http://192.168.1.18:8000";
 
 interface OrderRow {
   id: string;
@@ -871,7 +872,14 @@ const Orders = () => {
                   </div>
                 </div>
 
-                <p className="mt-4 text-center text-[11px] text-slate-500">Thank you. Visit again.</p>
+                <div className="mt-4 space-y-1 text-center text-[11px] text-slate-500">
+                  <p>Thank you. Visit again.</p>
+                  <p className="font-medium text-slate-600">Follow us on Instagram</p>
+                  <div className="flex justify-center">
+                    <Instagram className="h-4 w-4 text-slate-600" />
+                  </div>
+                  <p className="text-slate-600">@dip_dash_</p>
+                </div>
               </div>
 
               <div className="thermal-no-print mt-4 flex items-center justify-center gap-3">
@@ -879,7 +887,7 @@ const Orders = () => {
                   onClick={() => window.print()}
                   className="rounded-md bg-slate-900 px-4 py-2 text-xs font-semibold text-white hover:bg-black"
                 >
-                  Thermal Print
+                  Print
                 </button>
                 <button
                   onClick={() => downloadInvoicePdf(invoiceData)}
@@ -1042,5 +1050,6 @@ function StatCard({
 }
 
 export default Orders;
+
 
 

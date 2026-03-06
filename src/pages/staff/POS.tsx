@@ -1,12 +1,12 @@
 ﻿import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { ShoppingCart, Tag } from "lucide-react";
+import { Instagram, ShoppingCart, Tag } from "lucide-react";
 
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
-const BASE_URL = "https://billingdemo-irsxd.ondigitalocean.app";
+const BASE_URL = "http://192.168.1.18:8000";
 const HOLD_CART_KEY = "staff_pos_hold_cart_v1";
 
 /* ================= TYPES ================= */
@@ -2304,7 +2304,14 @@ export default function SalesTransactionPage() {
                       <span>Rs.{Number(invoiceData?.final_amount || 0).toLocaleString()}</span>
                     </div>
                   </div>
-                  <p className="mt-4 text-center text-[11px] text-slate-500">Thank you. Visit again.</p>
+                  <div className="mt-4 space-y-1 text-center text-[11px] text-slate-500">
+                    <p>Thank you. Visit again.</p>
+                    <p className="font-medium text-slate-600">Follow us on Instagram</p>
+                    <div className="flex justify-center">
+                      <Instagram className="h-4 w-4 text-slate-600" />
+                    </div>
+                    <p className="text-slate-600">@dip_dash_</p>
+                  </div>
                 </div>
               )}
 
@@ -2450,4 +2457,5 @@ export default function SalesTransactionPage() {
     </div>
   );
 }
+
 

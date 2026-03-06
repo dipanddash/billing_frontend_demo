@@ -4,7 +4,7 @@ import { TrendingUp, ShoppingBag, Users, DollarSign, type LucideIcon } from "luc
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, BarChart, Bar } from "recharts";
 import dashboardBanner from "@/assets/dashboard-banner.jpg";
 
-const API_BASE = "https://billingdemo-irsxd.ondigitalocean.app";
+const API_BASE = "http://192.168.1.18:8000";
 type Period = "weekly" | "monthly";
 type JsonRecord = Record<string, unknown>;
 
@@ -76,6 +76,43 @@ const toNum = (value: unknown) => {
   return Number.isFinite(parsed) ? parsed : 0;
 };
 
+const pickMetricValue = (rows: JsonRecord[], names: string[], fallback = 0) => {
+  const normalized = names.map((name) => name.trim().toLowerCase());
+  const row = rows.find((item) => {
+    const key = String(item.metric ?? item.name ?? item.label ?? item.title ?? "")
+      .trim()
+      .toLowerCase();
+    return normalized.includes(key);
+  });
+  return toNum(row?.value ?? row?.amount ?? row?.count ?? row?.total ?? fallback);
+};
+
+const formatPercent = (value: unknown, fallback = "+0%") => {
+  if (value === null || value === undefined || value === "") return fallback;
+  const n = toNum(value);
+  if (!Number.isFinite(n)) return fallback;
+  const sign = n > 0 ? "+" : "";
+  return `${sign}${n}%`;
+};
+
+const pickMetricChange = (rows: JsonRecord[], names: string[], fallback = "+0%") => {
+  const normalized = names.map((name) => name.trim().toLowerCase());
+  const row = rows.find((item) => {
+    const key = String(item.metric ?? item.name ?? item.label ?? item.title ?? "")
+      .trim()
+      .toLowerCase();
+    return normalized.includes(key);
+  });
+  return formatPercent(
+    row?.change_pct ??
+      row?.change_percent ??
+      row?.change ??
+      row?.trend_pct ??
+      row?.trend,
+    fallback
+  );
+};
+
 const money = (value: number) => `Rs. ${value.toLocaleString()}`;
 
 const pretty = (value: string) =>
@@ -144,6 +181,7 @@ const AdminDashboard = () => {
         if (summaryRes.ok) {
           const raw = await summaryRes.json();
           const root = asRecord(raw);
+          const dataRoot = asRecord(root.data);
           const metricList = Array.isArray(raw)
             ? asList(raw)
             : asList(root.summary).length > 0
@@ -161,19 +199,72 @@ const AdminDashboard = () => {
               : null;
 
           if (metricMap) {
-            const revenue = toNum(metricMap["total sales"]);
-            const orders = toNum(metricMap["total orders"]);
-            const staff = toNum(metricMap["active staff"] ?? fallbackActiveStaff);
-            const avgOrderRaw = toNum(metricMap["average order value"]);
+            const revenue = pickMetricValue(
+              metricList,
+              ["Total Sales", "Total Revenue", "Gross Revenue", "Revenue"],
+              toNum(metricMap["total sales"] ?? metricMap["total revenue"] ?? metricMap["gross revenue"])
+            );
+            const orders = pickMetricValue(
+              metricList,
+              ["Total Orders", "Total Bills", "Bills Processed", "Orders", "Bill Count"],
+              toNum(metricMap["total orders"] ?? metricMap["total bills"] ?? metricMap["bills processed"])
+            );
+            const staff = pickMetricValue(
+              metricList,
+              ["Active Staff", "Staff On Duty", "Staff Count"],
+              toNum(metricMap["active staff"] ?? fallbackActiveStaff)
+            );
+            const avgOrderRaw = pickMetricValue(
+              metricList,
+              ["Average Order Value", "Avg Order Value", "AOV"],
+              toNum(metricMap["average order value"])
+            );
             const avgOrder = avgOrderRaw > 0 ? avgOrderRaw : orders > 0 ? revenue / orders : 0;
+            const revenueChange = pickMetricChange(
+              metricList,
+              ["Total Sales", "Total Revenue", "Gross Revenue", "Revenue"],
+              formatPercent(
+                root.revenue_change_pct ??
+                  root.revenue_change ??
+                  dataRoot.revenue_change_pct ??
+                  dataRoot.revenue_change,
+                "+0%"
+              )
+            );
+            const orderChange = pickMetricChange(
+              metricList,
+              ["Total Orders", "Total Bills", "Bills Processed", "Orders", "Bill Count"],
+              formatPercent(
+                root.orders_change_pct ??
+                  root.orders_change ??
+                  root.bills_change_pct ??
+                  root.bills_change ??
+                  dataRoot.orders_change_pct ??
+                  dataRoot.orders_change ??
+                  dataRoot.bills_change_pct ??
+                  dataRoot.bills_change,
+                "+0%"
+              )
+            );
+            const aovChange = pickMetricChange(
+              metricList,
+              ["Average Order Value", "Avg Order Value", "AOV"],
+              formatPercent(
+                root.aov_change_pct ??
+                  root.aov_change ??
+                  dataRoot.aov_change_pct ??
+                  dataRoot.aov_change,
+                "+0%"
+              )
+            );
             setSummary((prev) => ({
               revenue,
               orders,
               staff,
               avgOrder,
-              revenueChange: prev.revenueChange,
-              orderChange: prev.orderChange,
-              aovChange: prev.aovChange,
+              revenueChange,
+              orderChange,
+              aovChange,
             }));
           } else {
           const root = asRecord(raw);
@@ -591,6 +682,5 @@ const AdminDashboard = () => {
 };
 
 export default AdminDashboard;
-
 
 

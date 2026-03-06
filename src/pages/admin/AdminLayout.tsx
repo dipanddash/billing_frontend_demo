@@ -36,7 +36,7 @@ const AdminLayout = () => {
   useEffect(() => {
     const originalFetch = window.fetch.bind(window);
     const LOADER_DELAY_MS = 450;
-    const API_ORIGIN = "https://billingdemo-irsxd.ondigitalocean.app";
+    const API_ORIGIN = "http://192.168.1.18:8000";
 
     const getRequestUrl = (input: RequestInfo | URL) => {
       if (typeof input === "string") return input;
@@ -124,7 +124,7 @@ const AdminLayout = () => {
 
   if (token) {
     try {
-      await fetch("https://billingdemo-irsxd.ondigitalocean.app/api/accounts/logout/", {
+      await fetch("http://192.168.1.18:8000/api/accounts/logout/", {
         method: "POST",
         headers: {
           Authorization: `Bearer ${token}`,
@@ -250,6 +250,7 @@ const AdminLayout = () => {
 };
 
 export default AdminLayout;
+
 
 
 

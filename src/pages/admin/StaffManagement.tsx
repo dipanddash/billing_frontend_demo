@@ -1,7 +1,7 @@
 ﻿import { useEffect, useMemo, useRef, useState } from "react";
 import { AlertCircle, CalendarCheck2, Check, ChevronDown, Clock3, ShieldCheck, UserCog, Users2, X } from "lucide-react";
 
-const API_BASE = "https://billingdemo-irsxd.ondigitalocean.app";
+const API_BASE = "http://192.168.1.18:8000";
 
 type StaffStatus = "ACTIVE" | "INACTIVE" | "ON_LEAVE";
 
@@ -1095,4 +1095,5 @@ const StaffManagement = () => {
 };
 
 export default StaffManagement;
+
 

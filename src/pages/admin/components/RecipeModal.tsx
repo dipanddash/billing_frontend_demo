@@ -1,6 +1,6 @@
 ﻿import { useState } from 'react'
 
-const API_BASE = 'https://billingdemo-irsxd.ondigitalocean.app/api/products'
+const API_BASE = 'http://192.168.1.18:8000/api/products'
 
 interface Recipe {
   id: string
@@ -156,5 +156,6 @@ const RecipeModal = ({
 }
 
 export default RecipeModal
+
 
 

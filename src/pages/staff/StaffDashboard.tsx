@@ -27,7 +27,7 @@ import {
   YAxis,
 } from "recharts";
 
-const BASE_URL = "https://billingdemo-irsxd.ondigitalocean.app";
+const BASE_URL = "http://192.168.1.18:8000";
 
 const API = {
   dashboard: `${BASE_URL}/api/reports/dashboard/`,
@@ -93,6 +93,11 @@ const StaffDashboard = () => {
     return Number.isFinite(n) ? n : fallback;
   };
 
+  const asPercentNumber = (value: unknown, fallback = 0) => {
+    if (value === null || value === undefined || value === "") return fallback;
+    return asNumber(value, fallback);
+  };
+
   const asArray = (value: unknown): any[] => {
     if (Array.isArray(value)) return value;
     if (Array.isArray((value as any)?.results)) return (value as any).results;
@@ -102,8 +107,8 @@ const StaffDashboard = () => {
 
   const pickReportRows = (payload: any): any[] => {
     if (Array.isArray(payload)) return payload;
-    if (Array.isArray(payload?.summary)) return payload.summary;
     if (Array.isArray(payload?.data)) return payload.data;
+    if (Array.isArray(payload?.summary)) return payload.summary;
     if (Array.isArray(payload?.results)) return payload.results;
     return [];
   };
@@ -114,11 +119,28 @@ const StaffDashboard = () => {
 
     const authHeaders = { Authorization: `Bearer ${token}` };
 
-    const metricValue = (metrics: any[], name: string, fallback = 0) => {
-      const row = metrics.find(
-        (m) => String(m?.metric ?? "").trim().toLowerCase() === name.toLowerCase()
+    const metricValue = (metrics: any[], names: string[], fallback = 0) => {
+      const normalized = names.map((name) => name.trim().toLowerCase());
+      const row = metrics.find((m) => {
+        const key = String(m?.metric ?? m?.name ?? m?.label ?? "").trim().toLowerCase();
+        return normalized.includes(key);
+      });
+      return asNumber(row?.value ?? row?.amount ?? row?.count ?? row?.total, fallback);
+    };
+    const metricTrend = (metrics: any[], names: string[], fallback = 0) => {
+      const normalized = names.map((name) => name.trim().toLowerCase());
+      const row = metrics.find((m) => {
+        const key = String(m?.metric ?? m?.name ?? m?.label ?? "").trim().toLowerCase();
+        return normalized.includes(key);
+      });
+      return asPercentNumber(
+        row?.change_pct ??
+          row?.change_percent ??
+          row?.change ??
+          row?.trend_pct ??
+          row?.trend,
+        fallback
       );
-      return asNumber(row?.value, fallback);
     };
 
     const loadDashboard = async () => {
@@ -149,9 +171,83 @@ const StaffDashboard = () => {
         }
 
         if (dashboardRes.ok) {
-          const metrics = pickReportRows(await dashboardRes.json());
+          const dashboardRaw = await dashboardRes.json();
+          const metrics = pickReportRows(dashboardRaw);
+          const dashboardRoot =
+            dashboardRaw && typeof dashboardRaw === "object" && !Array.isArray(dashboardRaw)
+              ? (dashboardRaw as Record<string, unknown>)
+              : {};
 
-          const metricRevenue = metricValue(metrics, "Total Sales", 0);
+          const revenueFromRoot = asNumber(
+            dashboardRoot.total_sales ??
+              dashboardRoot.total_revenue ??
+              dashboardRoot.today_sales ??
+              dashboardRoot.today_revenue ??
+              dashboardRoot.gross_revenue ??
+              dashboardRoot.revenue,
+            0
+          );
+          const billsFromRoot = asNumber(
+            dashboardRoot.total_orders ??
+              dashboardRoot.total_bills ??
+              dashboardRoot.bills_processed ??
+              dashboardRoot.today_orders ??
+              dashboardRoot.order_count,
+            0
+          );
+          const collectionRateFromRoot = asNumber(
+            dashboardRoot.collection_rate ??
+              dashboardRoot.payment_collection_rate ??
+              dashboardRoot.collection_percentage ??
+              dashboardRoot.collection_percent ??
+              dashboardRoot.collection,
+            Number.NaN
+          );
+          const conversionFromRoot = asNumber(
+            dashboardRoot.customer_conversion ??
+              dashboardRoot.customer_conversion_rate ??
+              dashboardRoot.conversion_rate ??
+              dashboardRoot.conversion_percentage ??
+              dashboardRoot.conversion,
+            Number.NaN
+          );
+          const repeatCustomersFromRoot = asNumber(
+            dashboardRoot.repeat_customers ??
+              dashboardRoot.repeat_customer_rate ??
+              dashboardRoot.repeat_rate ??
+              dashboardRoot.repeat_customers_percentage,
+            Number.NaN
+          );
+          const revenueTrendFromRoot = asPercentNumber(
+            dashboardRoot.revenue_change_pct ??
+              dashboardRoot.revenue_change ??
+              dashboardRoot.total_revenue_change_pct ??
+              dashboardRoot.total_sales_change_pct,
+            0
+          );
+          const billsTrendFromRoot = asPercentNumber(
+            dashboardRoot.orders_change_pct ??
+              dashboardRoot.orders_change ??
+              dashboardRoot.bills_change_pct ??
+              dashboardRoot.total_orders_change_pct,
+            0
+          );
+          const conversionTrendFromRoot = asPercentNumber(
+            dashboardRoot.conversion_change_pct ?? dashboardRoot.conversion_change,
+            0
+          );
+          const repeatTrendFromRoot = asPercentNumber(
+            dashboardRoot.repeat_customers_change_pct ??
+              dashboardRoot.repeat_change_pct ??
+              dashboardRoot.repeat_change,
+            0
+          );
+
+          const metricRevenue = metricValue(
+            metrics,
+            ["Total Sales", "Total Revenue", "Gross Revenue", "Revenue"],
+            revenueFromRoot
+          );
           const fallbackRevenue = todayOrders
             .filter(
               (o) =>
@@ -168,9 +264,32 @@ const StaffDashboard = () => {
               0
             );
           const revenue = metricRevenue > 0 ? metricRevenue : fallbackRevenue;
-          const metricBills = metricValue(metrics, "Total Orders", 0);
-          // Prefer live today orders count so dashboard card matches queue/recent blocks.
-          const bills = todayOrders.length > 0 ? todayOrders.length : metricBills;
+          const metricBills = metricValue(
+            metrics,
+            ["Total Orders", "Total Bills", "Bills Processed", "Orders", "Bill Count"],
+            billsFromRoot
+          );
+          const metricRevenueTrend = metricTrend(
+            metrics,
+            ["Total Sales", "Total Revenue", "Gross Revenue", "Revenue"],
+            revenueTrendFromRoot
+          );
+          const metricBillsTrend = metricTrend(
+            metrics,
+            ["Total Orders", "Total Bills", "Bills Processed", "Orders", "Bill Count"],
+            billsTrendFromRoot
+          );
+          const metricConversionTrend = metricTrend(
+            metrics,
+            ["Conversion Rate", "Customer Conversion", "Conversion"],
+            conversionTrendFromRoot
+          );
+          const metricRepeatTrend = metricTrend(
+            metrics,
+            ["Repeat Customers", "Repeat Customer Rate", "Repeat Rate"],
+            repeatTrendFromRoot
+          );
+          const bills = metricBills > 0 ? metricBills : todayOrders.length;
           const completed = todayOrders.filter(
             (o) => String(o?.status ?? "").toUpperCase() === "COMPLETED"
           ).length;
@@ -190,18 +309,33 @@ const StaffDashboard = () => {
           });
           const repeatCount = [...freq.values()].filter((c) => c > 1).length;
           const repeatCustomers = freq.size > 0 ? Math.round((repeatCount / freq.size) * 100) : 0;
+          const metricCollectionRate = metricValue(
+            metrics,
+            ["Collection Rate", "Payment Collection Rate", "Collection"],
+            collectionRateFromRoot
+          );
+          const metricConversion = metricValue(
+            metrics,
+            ["Customer Conversion", "Conversion Rate", "Conversion"],
+            conversionFromRoot
+          );
+          const metricRepeatCustomers = metricValue(
+            metrics,
+            ["Repeat Customers", "Repeat Customer Rate", "Repeat Rate"],
+            repeatCustomersFromRoot
+          );
 
           setTodayTotals({
             revenue,
             bills,
             target: 0,
-            collectionRate,
-            conversion,
-            repeatCustomers,
-            revenueTrend: 0,
-            billsTrend: 0,
-            conversionTrend: 0,
-            repeatTrend: 0,
+            collectionRate: Number.isFinite(metricCollectionRate) ? metricCollectionRate : collectionRate,
+            conversion: Number.isFinite(metricConversion) ? metricConversion : conversion,
+            repeatCustomers: Number.isFinite(metricRepeatCustomers) ? metricRepeatCustomers : repeatCustomers,
+            revenueTrend: metricRevenueTrend,
+            billsTrend: metricBillsTrend,
+            conversionTrend: metricConversionTrend,
+            repeatTrend: metricRepeatTrend,
           });
         }
 
@@ -440,7 +574,7 @@ const StaffDashboard = () => {
           <div className="mt-6 grid grid-cols-2 gap-4 text-white md:grid-cols-4">
             <div>
               <p className="text-xs text-white/70">Gross Revenue</p>
-              <p className="text-xl font-semibold">â‚¹{summary.revenue.toLocaleString()}</p>
+              <p className="text-xl font-semibold">Rs.{summary.revenue.toLocaleString()}</p>
             </div>
             <div>
               <p className="text-xs text-white/70">Bills Processed</p>
@@ -452,7 +586,7 @@ const StaffDashboard = () => {
             </div>
             <div>
               <p className="text-xs text-white/70">Avg Bill Value</p>
-              <p className="text-xl font-semibold">â‚¹{summary.avgBill}</p>
+              <p className="text-xl font-semibold">Rs.{summary.avgBill}</p>
             </div>
           </div>
         </div>
@@ -461,31 +595,27 @@ const StaffDashboard = () => {
       <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <KPICard
           title="Total Revenue"
-          value={`â‚¹${summary.revenue.toLocaleString()}`}
+          value={`Rs.${summary.revenue.toLocaleString()}`}
           subtitle="Compared to yesterday"
           icon={<CircleDollarSign className="h-4 w-4" />}
-          trend={{ value: `${todayTotals.revenueTrend}%`, positive: todayTotals.revenueTrend >= 0 }}
         />
         <KPICard
           title="Total Bills"
           value={summary.bills}
           subtitle="All billing channels"
           icon={<ReceiptText className="h-4 w-4" />}
-          trend={{ value: `${todayTotals.billsTrend}%`, positive: todayTotals.billsTrend >= 0 }}
         />
         <KPICard
           title="Customer Conversion"
           value={`${summary.conversion}%`}
           subtitle="Walk-in to paid bills"
           icon={<Target className="h-4 w-4" />}
-          trend={{ value: `${todayTotals.conversionTrend}%`, positive: todayTotals.conversionTrend >= 0 }}
         />
         <KPICard
           title="Repeat Customers"
           value={`${summary.repeatCustomers}%`}
           subtitle="Retention this week"
           icon={<UserPlus className="h-4 w-4" />}
-          trend={{ value: `${todayTotals.repeatTrend}%`, positive: todayTotals.repeatTrend >= 0 }}
         />
       </section>
 
@@ -526,7 +656,7 @@ const StaffDashboard = () => {
 
           <div className="mt-4">
             <div className="mb-1 flex items-center justify-between text-xs">
-              <span className="text-muted-foreground">Revenue target: â‚¹{summary.target.toLocaleString()}</span>
+              <span className="text-muted-foreground">Revenue target: Rs.{summary.target.toLocaleString()}</span>
               <span className="font-semibold text-foreground">{summary.targetProgress}%</span>
             </div>
             <div className="h-2 overflow-hidden rounded-full bg-secondary">
@@ -779,6 +909,7 @@ const StaffDashboard = () => {
 };
 
 export default StaffDashboard;
+
 
 
 

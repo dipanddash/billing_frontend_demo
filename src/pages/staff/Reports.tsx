@@ -11,7 +11,7 @@ import {
   type StaffReportAccessByKey,
 } from "@/lib/reportsConfig";
 
-const API_BASE = "https://billingdemo-irsxd.ondigitalocean.app";
+const API_BASE = "http://192.168.1.18:8000";
 
 type ReportPayload = {
   meta?: Record<string, unknown>;
@@ -689,6 +689,7 @@ export default function StaffReports() {
     </div>
   );
 }
+
 
 
 

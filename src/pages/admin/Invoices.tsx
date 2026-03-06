@@ -1,5 +1,5 @@
 ﻿import StatusBadge from '@/components/StatusBadge';
-import { Download, ChevronLeft, ChevronRight, AlertTriangle } from 'lucide-react';
+import { Download, ChevronLeft, ChevronRight, AlertTriangle, Instagram } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { motion } from "framer-motion";
 import jsPDF from "jspdf";
@@ -14,7 +14,7 @@ import {
 } from "recharts";
 import { AreaChart, Area } from "recharts";
 
-const API_BASE = "https://billingdemo-irsxd.ondigitalocean.app";
+const API_BASE = "http://192.168.1.18:8000";
 
 type InvoiceStatus = 'paid' | 'pending' | 'overdue' | 'cancelled';
 
@@ -1042,7 +1042,14 @@ const Invoices = () => {
                   </div>
                 </div>
 
-                <p className="mt-4 text-center text-[11px] text-slate-500">Thank you. Visit again.</p>
+                <div className="mt-4 space-y-1 text-center text-[11px] text-slate-500">
+                  <p>Thank you. Visit again.</p>
+                  <p className="font-medium text-slate-600">Follow us on Instagram</p>
+                  <div className="flex justify-center">
+                    <Instagram className="h-4 w-4 text-slate-600" />
+                  </div>
+                  <p className="text-slate-600">@dip_dash_</p>
+                </div>
               </div>
             </div>
           </div>
@@ -1053,5 +1060,6 @@ const Invoices = () => {
 };
 
 export default Invoices;
+
 
 
