@@ -4,7 +4,7 @@ import { TrendingUp, ShoppingBag, Users, DollarSign, type LucideIcon } from "luc
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, BarChart, Bar } from "recharts";
 import dashboardBanner from "@/assets/dashboard-banner.jpg";
 
-const API_BASE = "http://192.168.1.18:8000";
+const API_BASE = "https://demo-j5fde.ondigitalocean.app";
 type Period = "weekly" | "monthly";
 type JsonRecord = Record<string, unknown>;
 
@@ -682,5 +682,6 @@ const AdminDashboard = () => {
 };
 
 export default AdminDashboard;
+
 
 

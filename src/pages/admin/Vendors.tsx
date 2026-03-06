@@ -14,7 +14,7 @@ import {
   Pencil,
 } from "lucide-react";
 
-const API_BASE = "http://192.168.1.18:8000";
+const API_BASE = "https://demo-j5fde.ondigitalocean.app";
 
 interface Vendor {
   id: string;
@@ -625,6 +625,7 @@ function SummaryPill({ label, value, icon }: { label: string; value: string; ico
 }
 
 export default Vendors;
+
 
 
 

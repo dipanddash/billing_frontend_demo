@@ -10,7 +10,7 @@ import {
   type StaffUserOption,
 } from "@/lib/reportsConfig";
 
-const API_BASE = "http://192.168.1.18:8000";
+const API_BASE = "https://demo-j5fde.ondigitalocean.app";
 
 type AccessConfig = {
   roleLabel: string;
@@ -420,6 +420,7 @@ const AdminProfile = () => {
 };
 
 export default AdminProfile;
+
 
 
 

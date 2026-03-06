@@ -9,7 +9,7 @@ import {
 
 /* ================= CONFIG ================= */
 
-const BASE_URL = "http://192.168.1.18:8000";
+const BASE_URL = "https://demo-j5fde.ondigitalocean.app";
 
 /* ================= TYPES ================= */
 
@@ -348,6 +348,7 @@ const OrderCard = ({
 };
 
 export default Kitchen;
+
 
 
 

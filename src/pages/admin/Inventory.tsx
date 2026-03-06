@@ -11,7 +11,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
-const API_BASE = 'http://192.168.1.18:8000/api/inventory'
+const API_BASE = 'https://demo-j5fde.ondigitalocean.app/api/inventory'
 
 interface Ingredient {
   id: string
@@ -651,5 +651,6 @@ const DeleteModal = ({
     </div>
   </div>
 )
+
 
 

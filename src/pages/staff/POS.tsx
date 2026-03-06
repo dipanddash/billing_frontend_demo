@@ -6,7 +6,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
-const BASE_URL = "http://192.168.1.18:8000";
+const BASE_URL = "https://demo-j5fde.ondigitalocean.app";
 const HOLD_CART_KEY = "staff_pos_hold_cart_v1";
 
 /* ================= TYPES ================= */
@@ -171,6 +171,7 @@ export default function SalesTransactionPage() {
   const [activeCategory, setActiveCategory] = useState("All");
   const [search, setSearch] = useState("");
   const [cart, setCart] = useState<CartItem[]>([]);
+  const [expandedAddonRows, setExpandedAddonRows] = useState<Record<string, boolean>>({});
   const [orderDetails, setOrderDetails] = useState<OrderDetails | null>(null);
   const [runtimeOrderId, setRuntimeOrderId] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
@@ -206,6 +207,17 @@ export default function SalesTransactionPage() {
   const [invoiceData, setInvoiceData] = useState<InvoiceData | null>(null);
   const [invoiceLoading, setInvoiceLoading] = useState(false);
   const [isSearchFocused, setIsSearchFocused] = useState(false);
+
+  useEffect(() => {
+    const activeKeys = new Set(cart.map((item) => item.key));
+    setExpandedAddonRows((prev) => {
+      const next: Record<string, boolean> = {};
+      Object.entries(prev).forEach(([key, value]) => {
+        if (activeKeys.has(key)) next[key] = value;
+      });
+      return next;
+    });
+  }, [cart]);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const searchDropdownRef = useRef<HTMLDivElement | null>(null);
   const pendingQtyInputRef = useRef<HTMLInputElement | null>(null);
@@ -1545,9 +1557,9 @@ export default function SalesTransactionPage() {
           }
         }
       `}</style>
-      <div className="mx-auto grid max-w-[2000px] grid-cols-1 gap-6 lg:grid-cols-12">
+      <div className="mx-auto grid max-w-[2200px] grid-cols-1 gap-5 lg:grid-cols-12 xl:gap-8">
         {/* LEFT */}
-        <div className="space-y-6 lg:col-span-8">
+        <div className="space-y-6 lg:col-span-7">
           <div ref={searchDropdownRef} className="relative max-w-md">
             <Input
               placeholder="Search products..."
@@ -1728,10 +1740,10 @@ export default function SalesTransactionPage() {
         </div>
 
         {/* RIGHT */}
-        <div className="lg:col-span-4">
-          <Card className="sticky top-1 flex h-[12in] flex-col overflow-hidden rounded-3xl border border-purple-200/70 bg-white shadow-[0_22px_55px_rgba(91,33,182,0.18)]">
+        <div className="lg:col-span-5">
+          <Card className="sticky top-1 flex min-h-[70vh] flex-col overflow-hidden rounded-[28px] border border-purple-200/70 bg-white shadow-[0_22px_55px_rgba(91,33,182,0.18)] lg:h-[12in]">
             {/* HEADER */}
-            <div className="flex items-center justify-between border-b border-purple-100 bg-[linear-gradient(120deg,#f4ecff_0%,#ffffff_100%)] p-4">
+            <div className="flex items-center justify-between border-b border-purple-100 bg-[linear-gradient(120deg,#f4ecff_0%,#ffffff_100%)] px-5 py-4">
               <h2 className="inline-flex items-center gap-2 text-base font-semibold text-purple-950">
                 <ShoppingCart className="h-4 w-4 text-purple-700" />
                 Your Cart
@@ -1750,7 +1762,7 @@ export default function SalesTransactionPage() {
 
             {/* ORDER INFO */}
             {displayOrder && (
-              <div className="space-y-1 border-b border-purple-100 bg-purple-50/70 px-4 py-3 text-sm">
+              <div className="space-y-1 border-b border-purple-100 bg-purple-50/70 px-5 py-3 text-sm">
                 {isTakeaway && (
                   <>
                     <p><b>Type:</b> {displayOrder.order_type === "SWIGGY" || displayOrder.order_type === "ZOMATO" ? displayOrder.order_type : "Takeaway"}</p>
@@ -1774,8 +1786,8 @@ export default function SalesTransactionPage() {
             )}
 
             {/* BODY */}
-            <div className="flex-1 overflow-auto p-3">
-              <div className="mb-2 grid grid-cols-12 border-b border-purple-100 pb-2 text-[11px] font-semibold uppercase tracking-wide text-purple-600">
+            <div className="flex-1 overflow-auto px-4 py-4 sm:px-5">
+              <div className="mb-2 hidden grid-cols-12 border-b border-purple-100 pb-2 text-[11px] font-semibold uppercase tracking-wide text-purple-600 md:grid">
                 <div className="col-span-5">Item</div>
                 <div className="col-span-3 text-center">Qty</div>
                 <div className="col-span-2 text-center">GST</div>
@@ -1793,72 +1805,117 @@ export default function SalesTransactionPage() {
                 const base = item.price * item.qty;
                 const taxableBase = (item.basePrice ?? item.price) * item.qty;
                 const final = base + (taxableBase * rate) / 100;
+                const selectedAddons = item.selectedAddons ?? [];
+                const showAllAddons = Boolean(expandedAddonRows[item.key]);
+                const visibleAddons = showAllAddons ? selectedAddons : selectedAddons.slice(0, 1);
+                const hiddenAddonCount = Math.max(0, selectedAddons.length - visibleAddons.length);
 
                 return (
                   <div
                     key={item.key}
-                    className="mb-2 grid grid-cols-12 items-center rounded-xl border border-purple-100 bg-purple-50/40 px-2 py-2 text-[12px]"
+                    className="mb-3 rounded-2xl border border-purple-100 bg-[linear-gradient(180deg,rgba(250,245,255,0.95)_0%,rgba(255,255,255,0.98)_100%)] px-3.5 py-3.5 text-[12px] shadow-[0_10px_24px_rgba(109,40,217,0.06)]"
                   >
-                    <div className="col-span-5 flex items-center gap-2 rounded-lg text-left">
-                      <img
-                        src={item.image || "https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=120&q=80"}
-                        className="h-9 w-9 rounded-md object-cover"
-                      />
-                      <div className="min-w-0">
-                        <p className="font-medium text-purple-950 break-words">{item.name}</p>
-                        <p className="text-[11px] text-purple-600/75">
-                          Rs {item.price} x {item.qty}
-                        </p>
-                        {item.type === "product" && (
-                          <button
-                            type="button"
-                            onClick={() => openQtyModalForCartItem(item)}
-                            className="mt-0.5 text-[12px] font-semibold text-purple-700 underline decoration-purple-400 underline-offset-2 hover:text-purple-900"
-                            title="Open addons modal"
-                          >
-                            Edit addons
-                          </button>
-                        )}
-                        {item.selectedAddons && item.selectedAddons.length > 0 && (
-                          <div className="mt-1 space-y-0.5 text-[10px] text-purple-700/85">
-                            {item.selectedAddons.map((addon) => (
+                    <div className="grid grid-cols-1 gap-3 md:grid-cols-12 md:items-center">
+                      <div className="flex items-start gap-3 rounded-lg text-left md:col-span-5">
+                        <img
+                          src={item.image || "https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=120&q=80"}
+                          className="h-12 w-12 rounded-xl object-cover ring-1 ring-purple-100"
+                        />
+                        <div className="min-w-0">
+                          <p className="font-semibold leading-5 text-purple-950 break-words">{item.name}</p>
+                          <p className="mt-0.5 text-[11px] text-purple-600/75">
+                            Rs {item.price} x {item.qty}
+                          </p>
+                          {item.type === "product" && (
+                            <button
+                              type="button"
+                              onClick={() => openQtyModalForCartItem(item)}
+                              className="mt-1 text-[12px] font-semibold text-purple-700 underline decoration-purple-400 underline-offset-2 hover:text-purple-900"
+                              title="Open addons modal"
+                            >
+                              Edit addons
+                            </button>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 gap-2.5 md:col-span-7 md:mt-0 md:grid-cols-7 md:items-center">
+                        <div className="flex items-center justify-between gap-3 rounded-xl border border-purple-100 bg-white/85 px-3 py-2 md:col-span-3 md:justify-center md:border-0 md:bg-transparent md:px-0 md:py-0">
+                          <span className="text-[10px] font-semibold uppercase tracking-wide text-purple-600 md:hidden">
+                            Qty
+                          </span>
+                          <div className="inline-flex items-center rounded-xl border border-purple-200 bg-white shadow-sm">
+                            <button
+                              onClick={() => updateQty(item.key, -1)}
+                              disabled={item.qty <= 1}
+                              className="h-8 w-8 rounded-l-lg text-base font-bold leading-none text-purple-700 transition hover:bg-purple-100 disabled:cursor-not-allowed disabled:opacity-40"
+                            >
+                              -
+                            </button>
+                            <input
+                              type="number"
+                              min={1}
+                              value={item.qty}
+                              onChange={(e) => {
+                                const parsed = Number(e.target.value);
+                                if (Number.isNaN(parsed)) return;
+                                setQty(item.key, parsed);
+                              }}
+                              className="h-8 w-12 border-x border-purple-200 bg-white px-1 text-center text-sm font-semibold text-purple-900 outline-none focus:bg-purple-50"
+                            />
+                            <button
+                              onClick={() => updateQty(item.key, 1)}
+                              className="h-8 w-8 rounded-r-lg text-base font-bold leading-none text-purple-700 transition hover:bg-purple-100"
+                            >
+                              +
+                            </button>
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2.5 md:col-span-2 md:block">
+                          <div className="rounded-xl border border-purple-100 bg-white/80 px-3 py-2.5 text-left md:rounded-none md:border-0 md:bg-transparent md:px-0 md:py-0 md:text-center">
+                            <span className="block text-[10px] font-semibold uppercase tracking-wide text-purple-600 md:hidden">
+                              GST
+                            </span>
+                            <span className="font-medium text-purple-800">{rate}%</span>
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2.5 md:col-span-2 md:block">
+                          <div className="rounded-xl border border-purple-100 bg-white px-3 py-2.5 text-right shadow-[0_6px_14px_rgba(109,40,217,0.05)] md:rounded-none md:border-0 md:bg-transparent md:px-0 md:py-0 md:shadow-none">
+                            <span className="block text-[10px] font-semibold uppercase tracking-wide text-purple-600 md:hidden">
+                              Total
+                            </span>
+                            <span className="font-semibold text-purple-900">Rs {final.toFixed(0)}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {selectedAddons.length > 0 && (
+                        <div className="border-t border-purple-100/80 pt-2 md:col-span-12 md:ml-[60px] md:border-t-0 md:pt-0">
+                          <div className="space-y-0.5 text-[10px] leading-4 text-purple-700/85">
+                            {visibleAddons.map((addon) => (
                               <p key={`${item.key}-addon-${addon.id}`}>
                                 + {addon.name} x{addon.qty} @ Rs {addon.price.toFixed(2)} = Rs {(addon.qty * addon.price).toFixed(2)} / item
                               </p>
                             ))}
+                            {selectedAddons.length > 1 && (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setExpandedAddonRows((prev) => ({
+                                    ...prev,
+                                    [item.key]: !prev[item.key],
+                                  }))
+                                }
+                                className="mt-0.5 text-[10px] font-semibold text-purple-700 underline decoration-purple-400 underline-offset-2 hover:text-purple-900"
+                              >
+                                {showAllAddons
+                                  ? "View less addons"
+                                  : `View more addons (${hiddenAddonCount})`}
+                              </button>
+                            )}
                           </div>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="col-span-3 flex items-center justify-center gap-1">
-                      <button
-                        onClick={() => updateQty(item.key, -1)}
-                        className="h-6 w-6 rounded-md bg-white text-sm font-bold text-purple-700 shadow-sm hover:bg-purple-100"
-                      >
-                        -
-                      </button>
-                      <input
-                        type="number"
-                        min={1}
-                        value={item.qty}
-                        onChange={(e) => {
-                          const parsed = Number(e.target.value);
-                          if (Number.isNaN(parsed)) return;
-                          setQty(item.key, parsed);
-                        }}
-                        className="h-6 w-12 rounded-md border border-purple-200 bg-white px-1 text-center font-semibold text-purple-900 outline-none focus:border-purple-400"
-                      />
-                      <button
-                        onClick={() => updateQty(item.key, 1)}
-                        className="h-6 w-6 rounded-md bg-white text-sm font-bold text-purple-700 shadow-sm hover:bg-purple-100"
-                      >
-                        +
-                      </button>
-                    </div>
-                    <div className="col-span-2 text-center font-medium text-purple-800">{rate}%</div>
-                    <div className="col-span-2 text-right font-semibold text-purple-900">
-                      Rs {final.toFixed(0)}
+                        </div>
+                      )}
                     </div>
                   </div>
                 );
@@ -2457,5 +2514,6 @@ export default function SalesTransactionPage() {
     </div>
   );
 }
+
 
 

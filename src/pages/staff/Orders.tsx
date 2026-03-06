@@ -13,7 +13,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 
-const BASE_URL = "http://192.168.1.18:8000";
+const BASE_URL = "https://demo-j5fde.ondigitalocean.app";
 
 interface OrderRow {
   id: string;
@@ -1050,6 +1050,7 @@ function StatCard({
 }
 
 export default Orders;
+
 
 
 

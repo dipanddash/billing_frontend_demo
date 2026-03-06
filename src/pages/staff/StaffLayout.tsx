@@ -112,7 +112,7 @@ const StaffLayout = () => {
 
   if (token) {
     try {
-      await fetch("http://192.168.1.18:8000/api/accounts/logout/", {
+      await fetch("https://demo-j5fde.ondigitalocean.app/api/accounts/logout/", {
         method: "POST",
         headers: {
           Authorization: `Bearer ${token}`,
@@ -286,5 +286,6 @@ const StaffLayout = () => {
 };
 
 export default StaffLayout;
+
 
 

@@ -13,7 +13,7 @@ import { type TableData, type TableStatus } from '@/data/tables';
 
 /* ================= CONFIG ================= */
 
-const BASE_URL = 'http://192.168.1.18:8000';
+const BASE_URL = 'https://demo-j5fde.ondigitalocean.app';
 
 const TABLES_LIST_ENDPOINT = '/api/tables/list/';
 const TABLES_CREATE_ENDPOINT = '/api/tables/create/';
@@ -598,6 +598,7 @@ const Index = () => {
 };
 
 export default Index;
+
 
 
 

@@ -1,7 +1,7 @@
 ﻿import { useEffect, useMemo, useState } from "react";
 import { Boxes, Plus, Pencil, Trash2, ClipboardList, ShieldAlert } from "lucide-react";
 
-const API_BASE = "http://192.168.1.18:8000";
+const API_BASE = "https://demo-j5fde.ondigitalocean.app";
 
 interface AssetCategory {
   id: number;
@@ -587,5 +587,6 @@ const StatCard = ({ title, value, icon }: { title: string; value: string | numbe
 );
 
 export default Assets;
+
 
 

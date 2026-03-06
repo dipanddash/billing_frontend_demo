@@ -27,7 +27,7 @@ import {
   YAxis,
 } from "recharts";
 
-const BASE_URL = "http://192.168.1.18:8000";
+const BASE_URL = "https://demo-j5fde.ondigitalocean.app";
 
 const API = {
   dashboard: `${BASE_URL}/api/reports/dashboard/`,
@@ -909,6 +909,7 @@ const StaffDashboard = () => {
 };
 
 export default StaffDashboard;
+
 
 
 

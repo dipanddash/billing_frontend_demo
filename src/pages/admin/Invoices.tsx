@@ -14,7 +14,7 @@ import {
 } from "recharts";
 import { AreaChart, Area } from "recharts";
 
-const API_BASE = "http://192.168.1.18:8000";
+const API_BASE = "https://demo-j5fde.ondigitalocean.app";
 
 type InvoiceStatus = 'paid' | 'pending' | 'overdue' | 'cancelled';
 
@@ -1060,6 +1060,7 @@ const Invoices = () => {
 };
 
 export default Invoices;
+
 
 
 

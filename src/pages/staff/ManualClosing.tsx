@@ -2,7 +2,7 @@
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 
-const API_BASE = "http://192.168.1.18:8000";
+const API_BASE = "https://demo-j5fde.ondigitalocean.app";
 
 type IngredientRow = {
   id: string;
@@ -366,5 +366,6 @@ export default function StaffManualClosing() {
     </div>
   );
 }
+
 
 
