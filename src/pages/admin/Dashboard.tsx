@@ -5,6 +5,8 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import dashboardBanner from "@/assets/dashboard-banner.jpg";
 
 const API_BASE = "https://demo-j5fde.ondigitalocean.app";
+const TOP_DISH_PLACEHOLDER =
+  "https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=200&q=80";
 type Period = "weekly" | "monthly";
 type JsonRecord = Record<string, unknown>;
 
@@ -34,6 +36,7 @@ interface StatPoint {
 }
 
 interface TopDish {
+  id?: string;
   name: string;
   sold: number;
   image: string;
@@ -115,6 +118,22 @@ const pickMetricChange = (rows: JsonRecord[], names: string[], fallback = "+0%")
 
 const money = (value: number) => `Rs. ${value.toLocaleString()}`;
 
+const resolveImageUrl = (value: unknown) => {
+  const raw = String(value ?? "").trim();
+  if (!raw) return "";
+  if (/^https?:\/\//i.test(raw) || raw.startsWith("data:") || raw.startsWith("blob:")) return raw;
+  if (raw.startsWith("//")) return `https:${raw}`;
+  if (raw.startsWith("/")) return `${API_BASE}${raw}`;
+  return `${API_BASE}/${raw.replace(/^\.?\//, "")}`;
+};
+
+const normalizeName = (value: unknown) =>
+  String(value ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .replace(/[^\w\s]/g, "");
+
 const pretty = (value: string) =>
   value
     .toLowerCase()
@@ -157,7 +176,17 @@ const AdminDashboard = () => {
     const loadDashboard = async () => {
       setIsLoading(true);
       try {
-        const [summaryRes, weeklyRevenueRes, monthlyRevenueRes, paymentRes, productWiseRes, ordersRes, staffRes] = await Promise.all([
+        const [
+          summaryRes,
+          weeklyRevenueRes,
+          monthlyRevenueRes,
+          paymentRes,
+          productWiseRes,
+          ordersRes,
+          staffRes,
+          productsRes,
+          combosRes,
+        ] = await Promise.all([
           fetch(`${API_BASE}/api/reports/dashboard/`, { headers: getAuthHeaders() }),
           fetch(`${API_BASE}/api/reports/sales/daily/?period=weekly`, { headers: getAuthHeaders() }),
           fetch(`${API_BASE}/api/reports/sales/daily/?period=monthly`, { headers: getAuthHeaders() }),
@@ -165,7 +194,47 @@ const AdminDashboard = () => {
           fetch(`${API_BASE}/api/reports/sales/product/`, { headers: getAuthHeaders() }),
           fetch(`${API_BASE}/api/orders/recent/?limit=10`, { headers: getAuthHeaders() }),
           fetch(`${API_BASE}/api/accounts/staff/`, { headers: getAuthHeaders() }),
+          fetch(`${API_BASE}/api/products/products/`, { headers: getAuthHeaders() }),
+          fetch(`${API_BASE}/api/products/combos/`, { headers: getAuthHeaders() }),
         ]);
+
+        const catalogImageById = new Map<string, string>();
+        const catalogImageByName = new Map<string, string>();
+
+        const addCatalogEntry = (id: unknown, name: unknown, image: unknown) => {
+          const resolved = resolveImageUrl(image);
+          if (!resolved) return;
+
+          const idKey = String(id ?? "").trim();
+          const nameKey = normalizeName(name);
+
+          if (idKey && !catalogImageById.has(idKey)) catalogImageById.set(idKey, resolved);
+          if (nameKey && !catalogImageByName.has(nameKey)) catalogImageByName.set(nameKey, resolved);
+        };
+
+        if (productsRes.ok) {
+          const raw = await productsRes.json();
+          const list = Array.isArray(raw) ? asList(raw) : pickList(raw);
+          list.forEach((product) => {
+            addCatalogEntry(
+              product.id ?? product.product_id,
+              product.name ?? product.product_name,
+              product.image_url ?? product.image ?? product.photo ?? product.thumbnail
+            );
+          });
+        }
+
+        if (combosRes.ok) {
+          const raw = await combosRes.json();
+          const list = Array.isArray(raw) ? asList(raw) : pickList(raw);
+          list.forEach((combo) => {
+            addCatalogEntry(
+              combo.id ?? combo.combo_id,
+              combo.name ?? combo.combo_name,
+              combo.image_url ?? combo.image ?? combo.photo ?? combo.thumbnail
+            );
+          });
+        }
 
         let fallbackActiveStaff = 0;
         if (staffRes.ok) {
@@ -402,11 +471,19 @@ const AdminDashboard = () => {
           const raw = await productWiseRes.json();
           const list = pickList(raw);
 
-          const topDishMapped = list.slice(0, 5).map((x, i) => ({
-            name: String(x.product_name ?? x.name ?? "Product"),
+          const topDishMapped = list.slice(0, 5).map((x) => {
+            const id = String(x.product ?? x.product_id ?? x.id ?? x.combo ?? x.combo_id ?? "").trim();
+            const name = String(x.product_name ?? x.name ?? x.combo_name ?? "Product");
+            const reportImage = resolveImageUrl(x.image_url ?? x.image ?? x.photo ?? x.thumbnail);
+            const catalogImage = (id && catalogImageById.get(id)) || catalogImageByName.get(normalizeName(name)) || "";
+
+            return {
+            id,
+            name,
             sold: toNum(x.quantity_sold ?? x.sold ?? x.count ?? x.total_quantity ?? x.total_sold ?? x.orders_count),
-            image: String(x.image_url ?? x.image ?? x.photo ?? x.thumbnail ?? ""),
-          }));
+            image: catalogImage || reportImage,
+          };
+          });
           if (topDishMapped.length > 0) setTopDishes(topDishMapped);
 
           const categoryAgg = list.reduce<Record<string, number>>((acc, x) => {
@@ -598,11 +675,17 @@ const AdminDashboard = () => {
           <div className="space-y-3">
             {topDishes.map((dish, i) => (
               <div key={i} className="flex items-center gap-3">
-                {dish.image ? (
-                  <img src={dish.image} alt={dish.name} className="w-10 h-10 rounded-xl object-cover" />
-                ) : (
-                  <div className="w-10 h-10 rounded-xl bg-muted" />
-                )}
+                <img
+                  src={dish.image || TOP_DISH_PLACEHOLDER}
+                  alt={dish.name}
+                  className="h-10 w-10 shrink-0 rounded-xl object-cover"
+                  onError={(event) => {
+                    event.currentTarget.onerror = null;
+                    if (event.currentTarget.src !== TOP_DISH_PLACEHOLDER) {
+                      event.currentTarget.src = TOP_DISH_PLACEHOLDER;
+                    }
+                  }}
+                />
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-foreground truncate">{dish.name}</p>
                   <p className="text-xs text-muted-foreground">{dish.sold} sold</p>
