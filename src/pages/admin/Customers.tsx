@@ -47,7 +47,7 @@ const formatDate = (v?: string) => {
   return isNaN(d.getTime()) ? "-" : d.toLocaleDateString();
 };
 
-const money = (v?: number) => `â‚¹${(v ?? 0).toLocaleString()}`;
+const money = (v?: number) => `Rs. ${(v ?? 0).toLocaleString()}`;
 
 const monthLabel = (date: Date) =>
   date.toLocaleDateString("en-US", { month: "short" });
@@ -212,7 +212,7 @@ const Customers = () => {
         </h1>
 
         <p className="mt-1 text-sm text-slate-600">
-          Loyalty â€¢ Spending â€¢ Analytics
+          Loyalty | Spending | Analytics
         </p>
 
         <div className="mt-4 flex flex-wrap gap-2">
