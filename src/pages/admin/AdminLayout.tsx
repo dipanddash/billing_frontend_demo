@@ -150,8 +150,8 @@ const AdminLayout = () => {
                         {/* LOGO */}
             <Link to="/admin" className="flex items-center gap-2">
               <img
-                src="/logo.png"
-                alt="CAFEFLOW"
+                src="/dip%20and%20dash.png"
+                alt="Dip & Dash"
                 className="h-12 w-auto object-contain"
               />
             </Link>

@@ -2283,7 +2283,7 @@ export default function SalesTransactionPage() {
               ) : (
                 <div className="mx-auto w-full max-w-md rounded-md border border-dashed border-slate-300 p-3 font-mono text-[10px] leading-tight">
                   <div className="border-b border-dashed border-slate-300 pb-3 text-center">
-                    <img src="/logo.png" alt="Logo" className="mx-auto mb-2 h-10 w-auto object-contain" />
+                    <img src="/dip%20and%20dash.png" alt="Dip & Dash Logo" className="mx-auto mb-2 h-10 w-auto object-contain" />
                     <p className="text-sm font-bold tracking-wide">Kensei Food & Beverages Private Limited</p>
                     <p className="mt-1 font-semibold">DIP & DASH PERUNGUDI CHENNAI</p>
                     <div className="my-1 border-t border-dashed border-slate-400" />

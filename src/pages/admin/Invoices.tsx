@@ -86,7 +86,7 @@ const RECEIPT_HEADER = {
 
 const getLogoDataUrl = async (): Promise<string | null> => {
   try {
-    const response = await fetch("/logo.png");
+    const response = await fetch("/dip%20and%20dash.png");
     if (!response.ok) return null;
     const blob = await response.blob();
     return await new Promise((resolve) => {
@@ -951,8 +951,8 @@ const Invoices = () => {
               <div className="mx-auto w-full max-w-md rounded-md border border-dashed border-slate-300 p-3 font-mono text-[10px] leading-tight">
                 <div className="text-center border-b border-dashed border-slate-300 pb-3">
                   <img
-                    src="/logo.png"
-                    alt="CAFEFLOW Logo"
+                    src="/dip%20and%20dash.png"
+                    alt="Dip & Dash Logo"
                     className="mx-auto mb-2 h-10 w-auto object-contain"
                   />
                   <h3 className="text-sm font-bold tracking-wide">{RECEIPT_HEADER.legalName}</h3>
